@@ -146,9 +146,23 @@
     setVal('[name="mobile"]',           u.mobile || u.phone || '');
     setVal('[name="designation_bn"]',   u.designation_bn || '');
     setVal('[name="institution_name"]', u.institution_name || '');
-    setVal('[name="division"]',         u.division || '');
-    setVal('[name="district"]',         u.district || '');
-    setVal('[name="upazila"]',          u.upazila || '');
+
+    // BD-locations cascade for Division → District → Upazila. Falls back to a
+    // plain three-select if bd-locations.js isn't loaded for some reason.
+    const divEl  = profileForm.querySelector('[name="division"]');
+    const distEl = profileForm.querySelector('[name="district"]');
+    const upaEl  = profileForm.querySelector('[name="upazila"]');
+    if (window.BDLocations && divEl) {
+      window.BDLocations.bind(divEl, distEl, upaEl, {
+        division: u.division || '',
+        district: u.district || '',
+        upazila:  u.upazila  || '',
+      });
+    } else {
+      setVal('[name="division"]', u.division || '');
+      setVal('[name="district"]', u.district || '');
+      setVal('[name="upazila"]',  u.upazila  || '');
+    }
   }
 
   function prefillStep2FromProfile(u) {
@@ -161,12 +175,27 @@
     };
     // Carry the institution-level fields the user already filled in their profile.
     setVal('name_en',       u.institution_name || '');
-    setVal('division',      u.division || '');
-    setVal('district',      u.district || '');
-    setVal('upazila',       u.upazila || '');
     setVal('contact_name',  u.name || '');
     setVal('contact_phone', u.mobile || '');
     setVal('contact_email', u.email || '');
+
+    // Wire the bd-locations cascade for the institution-details step (it's
+    // optional here, so we keep the placeholder choices in sync but don't
+    // mark them required server-side).
+    const divEl  = form2.querySelector('[data-bd-division]');
+    const distEl = form2.querySelector('[data-bd-district]');
+    const upaEl  = form2.querySelector('[data-bd-upazila]');
+    if (window.BDLocations && divEl) {
+      window.BDLocations.bind(divEl, distEl, upaEl, {
+        division: u.division || '',
+        district: u.district || '',
+        upazila:  u.upazila  || '',
+      });
+    } else {
+      setVal('division', u.division || '');
+      setVal('district', u.district || '');
+      setVal('upazila',  u.upazila  || '');
+    }
   }
 
   if (profileForm) {

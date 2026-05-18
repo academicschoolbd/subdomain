@@ -87,14 +87,15 @@
         <div class="field"><label class="label" for="pf-division">বিভাগ / Division *</label>
           <select id="pf-division" name="division" required>
             <option value="">— Select division —</option>
-            <option>Dhaka</option><option>Chattogram</option><option>Khulna</option>
-            <option>Rajshahi</option><option>Rangpur</option><option>Sylhet</option>
-            <option>Mymensingh</option><option>Barishal</option>
           </select></div>
         <div class="field"><label class="label" for="pf-district">জেলা / District *</label>
-          <input id="pf-district" type="text" name="district" required maxlength="80" /></div>
+          <select id="pf-district" name="district" required>
+            <option value="">— Select division first —</option>
+          </select></div>
         <div class="field"><label class="label" for="pf-upazila">উপজেলা / Upazila / Thana *</label>
-          <input id="pf-upazila" type="text" name="upazila" required maxlength="80" /></div>
+          <select id="pf-upazila" name="upazila" required>
+            <option value="">— Select district first —</option>
+          </select></div>
         <div class="field field--wide flex-between">
           <button class="btn" type="button" data-back="1">← Back</button>
           <button class="btn btn--primary" type="submit" data-profile-submit>Save profile &amp; continue →</button>
@@ -128,14 +129,17 @@
         <div class="field"><label class="label">EIIN (if applicable)</label>
           <input type="text" name="eiin" maxlength="20" inputmode="numeric" /></div>
         <div class="field"><label class="label">Division</label>
-          <select name="division">
+          <select name="division" data-bd-division>
             <option value="">—</option>
-            <option>Dhaka</option><option>Chattogram</option><option>Khulna</option>
-            <option>Rajshahi</option><option>Rangpur</option><option>Sylhet</option>
-            <option>Mymensingh</option><option>Barishal</option>
           </select></div>
-        <div class="field"><label class="label">District</label><input type="text" name="district" /></div>
-        <div class="field"><label class="label">Upazila / Thana</label><input type="text" name="upazila" /></div>
+        <div class="field"><label class="label">District</label>
+          <select name="district" data-bd-district>
+            <option value="">— Select division first —</option>
+          </select></div>
+        <div class="field"><label class="label">Upazila / Thana</label>
+          <select name="upazila" data-bd-upazila>
+            <option value="">— Select district first —</option>
+          </select></div>
         <div class="field field--wide"><label class="label">Address</label>
           <input type="text" name="address" /></div>
         <div class="field"><label class="label">Contact name</label><input type="text" name="contact_name" /></div>
@@ -200,6 +204,7 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/bd-locations.js"></script>
 <script src="/assets/js/claim.js"></script>
 </body>
 </html>
