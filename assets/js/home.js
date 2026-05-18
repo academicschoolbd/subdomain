@@ -1,13 +1,16 @@
-/* Homepage dynamic behaviour. Depends on app.js. */
+/* Homepage dynamic behaviour. Depends on app.js.
+   v3.2 — SSR-seeded stats (no loading state), redesigned search result card. */
 (function () {
   'use strict';
   const App = window.App;
 
-  // Year stamp
-  const y = document.querySelector('[data-year]');
-  if (y) y.textContent = new Date().getFullYear();
+  // Year stamp.
+  const yEl = document.querySelector('[data-year]');
+  if (yEl) yEl.textContent = new Date().getFullYear();
 
-  // ---- WhatsApp community band + footer link ----
+  /* ------------------------------------------------------------------ */
+  /*  WhatsApp community band + footer link                              */
+  /* ------------------------------------------------------------------ */
   App.getSettings().then((s) => {
     const wa = s.whatsapp || {};
     const band = document.querySelector('[data-wa-band]');
@@ -42,28 +45,38 @@
     }
   }).catch(() => {});
 
-  // ---- Hero stats (verified / pending / seeded) + 4-tile realtime grid ----
+  /* ------------------------------------------------------------------ */
+  /*  Live realtime stats — SSR-seeded, refresh every 30 s, no skeleton  */
+  /* ------------------------------------------------------------------ */
   const liveTiles = {
     users:        document.querySelector('[data-tile="users"]'),
     claims_total: document.querySelector('[data-tile="claims_total"]'),
     pending:      document.querySelector('[data-tile="pending"]'),
     rejected:     document.querySelector('[data-tile="rejected"]'),
   };
-  const liveTilesPrev = { users: null, claims_total: null, pending: null, rejected: null };
+  // Seed previous values from the SSR-rendered numbers so the first refresh
+  // animates only genuine deltas (no jump from 0 → real).
+  const seed = window.__INITIAL_STATS__ || {};
+  const liveTilesPrev = {
+    users:        Number.isFinite(seed.users_registered) ? Number(seed.users_registered) : null,
+    claims_total: Number.isFinite(seed.claims_total)     ? Number(seed.claims_total)     : null,
+    pending:      Number.isFinite(seed.claims_pending)   ? Number(seed.claims_pending)   : null,
+    rejected:     Number.isFinite(seed.claims_rejected)  ? Number(seed.claims_rejected)  : null,
+  };
 
   function animateNumber(el, from, to) {
     if (!el) return;
     el.parentElement && el.parentElement.classList.remove('is-loading');
     from = Number.isFinite(from) ? from : 0;
     to = Number.isFinite(to) ? to : 0;
-    if (from === to) { el.textContent = String(to); return; }
+    if (from === to) { el.textContent = to.toLocaleString(); return; }
     const start = performance.now();
     const dur = 700;
     function frame(now) {
       const t = Math.min(1, (now - start) / dur);
       const eased = 1 - Math.pow(1 - t, 3);
       const val = Math.round(from + (to - from) * eased);
-      el.textContent = String(val);
+      el.textContent = val.toLocaleString();
       if (t < 1) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -89,16 +102,12 @@
   async function refreshStats() {
     try {
       const r = await App.api('/institutions/stats');
-
       const t = r.totals || {};
-      const pending  = Number(t.claims_pending  ?? 0);
-
-      // 4-tile realtime grid.
       const next = {
         users:        Number(t.users_registered ?? 0),
-        claims_total: Number(t.claims_total ?? 0),
-        pending:      pending,
-        rejected:     Number(t.claims_rejected ?? 0),
+        claims_total: Number(t.claims_total     ?? 0),
+        pending:      Number(t.claims_pending   ?? 0),
+        rejected:     Number(t.claims_rejected  ?? 0),
       };
       Object.keys(liveTiles).forEach((k) => {
         const el = liveTiles[k];
@@ -107,30 +116,21 @@
         setDelta(k, prev, next[k]);
         liveTilesPrev[k] = next[k];
       });
-
-      // Hero counter pill — "1,234 institutions have already joined"
-      const heroTxt = document.querySelector('[data-hero-counter-text]');
-      if (heroTxt) {
-        const users  = next.users;
-        const claims = next.claims_total;
-        heroTxt.textContent =
-          users.toLocaleString() + ' users · ' +
-          claims.toLocaleString() + ' subdomain' + (claims === 1 ? '' : 's') + ' claimed so far';
-      }
     } catch (e) {
-      // network blip — leave tiles as-is
+      // network blip — leave SSR-rendered tiles as-is
     }
   }
-
-  refreshStats();
+  // Kick off the first network refresh after SSR paint, then every 30 s.
+  setTimeout(refreshStats, 1500);
   let refreshTimer = setInterval(refreshStats, 30000);
-  // pause polling while the tab is hidden, resume when visible
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { clearInterval(refreshTimer); }
     else { refreshStats(); refreshTimer = setInterval(refreshStats, 30000); }
   });
 
-  // ---- Featured (recently verified) ----
+  /* ------------------------------------------------------------------ */
+  /*  Featured (recently verified) directory cards                       */
+  /* ------------------------------------------------------------------ */
   App.api('/institutions?status=verified&limit=6').then((r) => {
     const host = document.querySelector('[data-featured-list]');
     if (!host) return;
@@ -167,76 +167,136 @@
     return a;
   }
 
-  // ---- Slug availability check ----
+  /* ------------------------------------------------------------------ */
+  /*  Search → result card                                               */
+  /* ------------------------------------------------------------------ */
   const slugInput = document.querySelector('[data-slug-input]');
-  const brandSel = document.querySelector('[data-brand-select]');
-  const status = document.querySelector('[data-slug-status]');
-  const claim = document.querySelector('[data-slug-claim]');
-  const form = document.querySelector('[data-slug-form]');
+  const brandSel  = document.querySelector('[data-brand-select]');
+  const form      = document.querySelector('[data-slug-form]');
+  const submitBtn = document.querySelector('[data-slug-claim]');
+  const result    = document.querySelector('[data-search-result]');
+  const resIco    = document.querySelector('[data-result-ico]');
+  const resTitle  = document.querySelector('[data-result-title]');
+  const resSub    = document.querySelector('[data-result-sub]');
+  const resCta    = document.querySelector('[data-result-cta]');
+  const resAlt    = document.querySelector('[data-result-alt]');
+  const altName   = document.querySelector('[data-alt-name]');
+  const altCta    = document.querySelector('[data-alt-cta]');
 
-  let _claimUrl = null; // populated when a slug is available
+  const ICO_OK   = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>';
+  const ICO_BAD  = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+  const ICO_INFO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
 
-  function setStatus(msg, cls) {
-    if (!status) return;
-    status.className = 'slug-status ' + (cls || '');
-    status.textContent = msg || '';
+  function hideResult() {
+    if (result) result.hidden = true;
   }
 
-  function setClaimReady(ready, url) {
-    if (!claim) return;
-    if (ready) {
-      claim.removeAttribute('aria-disabled');
-      claim.classList.add('btn--ready');
-      claim.textContent = '⚡ Claim it now →';
-      _claimUrl = url || null;
-    } else {
-      claim.setAttribute('aria-disabled', 'true');
-      claim.classList.remove('btn--ready');
-      claim.textContent = 'Search';
-      _claimUrl = null;
-    }
-  }
-
-  const check = App.debounce(async () => {
-    if (!slugInput || !brandSel) return;
-    const raw = (slugInput.value || '').trim().toLowerCase();
-    if (raw.length < 3) { setStatus('Type at least 3 characters', 'checking'); setClaimReady(false); return; }
-    setStatus('Checking…', 'checking');
-    try {
-      const r = await App.api('/slug-check' + App.qs({ slug: raw, brand: brandSel.value }));
-      if (r.available) {
-        setStatus('✓ ' + r.normalized + '.' + brandSel.value + ' is available — one click to claim', 'ok');
-        setClaimReady(true, '/claim.php?brand=' + encodeURIComponent(brandSel.value)
-                     + '&slug=' + encodeURIComponent(r.normalized));
-      } else if (r.claimable_placeholder) {
-        setStatus('⚑ ' + r.normalized + '.' + brandSel.value + ' is a placeholder — you can claim it', 'ok');
-        setClaimReady(true, '/claim.php?brand=' + encodeURIComponent(brandSel.value)
-                     + '&slug=' + encodeURIComponent(r.normalized));
+  function showResult({ kind, title, sub, cta, alt }) {
+    if (!result) return;
+    result.hidden = false;
+    result.classList.remove('search-result--ok', 'search-result--bad', 'search-result--info');
+    result.classList.add('search-result--' + (kind || 'info'));
+    if (resIco)   resIco.innerHTML = kind === 'ok' ? ICO_OK : (kind === 'bad' ? ICO_BAD : ICO_INFO);
+    if (resTitle) resTitle.textContent = title || '';
+    if (resSub)   resSub.textContent   = sub   || '';
+    if (resCta) {
+      if (cta && cta.url) {
+        resCta.hidden = false;
+        resCta.textContent = cta.label || 'Claim Now';
+        resCta.setAttribute('href', cta.url);
       } else {
-        const sug = r.suggestion ? ' Try: ' + r.suggestion + '.' + brandSel.value : '';
-        setStatus('✗ ' + (r.reason || 'not available') + '.' + sug, 'bad');
-        setClaimReady(false);
+        resCta.hidden = true;
       }
-    } catch (e) {
-      setStatus(e.detail || 'Could not check right now', 'bad');
-      setClaimReady(false);
     }
-  }, 250); // a bit faster — the user feels instant feedback
+    if (resAlt) {
+      if (alt && alt.fqdn) {
+        resAlt.hidden = false;
+        if (altName) altName.textContent = alt.fqdn;
+        if (altCta)  altCta.setAttribute('href', alt.url || '#');
+      } else {
+        resAlt.hidden = true;
+      }
+    }
+  }
 
-  if (slugInput) slugInput.addEventListener('input', check);
-  if (brandSel) brandSel.addEventListener('change', check);
-  if (form) form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    // Available + URL set → jump straight to the claim wizard.
-    if (_claimUrl) { location.href = _claimUrl; return; }
-    check();
-  });
-  // Also: if the user clicks the (now-pulsing) primary button directly,
-  // honour the same shortcut.
-  if (claim) claim.addEventListener('click', (e) => {
-    if (claim.getAttribute('aria-disabled') === 'true') { e.preventDefault(); return; }
-    if (_claimUrl) { e.preventDefault(); location.href = _claimUrl; }
-  });
+  async function checkBrand(slug, brand) {
+    try {
+      const r = await App.api('/slug-check' + App.qs({ slug, brand }));
+      return { brand, ...r };
+    } catch (e) {
+      return { brand, available: false, normalized: slug, reason: (e && e.detail) || 'check failed' };
+    }
+  }
 
-  // ---- "Sign in & claim" button -> open auth modal (handled by app.js)
+  async function runSearch() {
+    if (!slugInput || !brandSel) return;
+    const raw   = (slugInput.value || '').trim().toLowerCase();
+    const brand = brandSel.value;
+    if (raw.length < 3) {
+      showResult({
+        kind: 'info',
+        title: 'Type at least 3 characters',
+        sub: 'Letters, digits and hyphens only — minimum 3 characters.',
+      });
+      return;
+    }
+    showResult({ kind: 'info', title: 'Searching…', sub: 'Checking availability across both brands.' });
+
+    // Check the chosen brand first; in parallel check the sibling brand for
+    // the "Also available" suggestion.
+    const sibling = brand === 'institution.bd' ? 'smartschool.bd' : 'institution.bd';
+    const [primary, alt] = await Promise.all([
+      checkBrand(raw, brand),
+      checkBrand(raw, sibling),
+    ]);
+
+    const isOk = primary.available || primary.claimable_placeholder;
+    const fqdn = (primary.normalized || raw) + '.' + brand;
+
+    if (isOk) {
+      const claimUrl = '/claim.php?brand=' + encodeURIComponent(brand)
+                     + '&slug=' + encodeURIComponent(primary.normalized);
+      const altOk    = alt.available || alt.claimable_placeholder;
+      const altFqdn  = (alt.normalized || raw) + '.' + sibling;
+      const altUrl   = '/claim.php?brand=' + encodeURIComponent(sibling)
+                     + '&slug=' + encodeURIComponent(alt.normalized || raw);
+      showResult({
+        kind: 'ok',
+        title: fqdn + ' is available!',
+        sub: primary.claimable_placeholder
+          ? 'This is a verified-placeholder. Claim it now to take ownership.'
+          : 'Claim it now before someone else does.',
+        cta: { url: claimUrl, label: 'Claim Now' },
+        alt: altOk ? { fqdn: altFqdn, url: altUrl } : null,
+      });
+    } else {
+      const altOk    = alt.available || alt.claimable_placeholder;
+      const altFqdn  = (alt.normalized || raw) + '.' + sibling;
+      const altUrl   = '/claim.php?brand=' + encodeURIComponent(sibling)
+                     + '&slug=' + encodeURIComponent(alt.normalized || raw);
+      const sug      = primary.suggestion ? ' Try ' + primary.suggestion + '.' + brand : '';
+      showResult({
+        kind: 'bad',
+        title: fqdn + ' is not available',
+        sub: (primary.reason || 'Already taken or reserved.') + sug,
+        cta: null,
+        alt: altOk ? { fqdn: altFqdn, url: altUrl } : null,
+      });
+    }
+  }
+
+  // Live availability hint: as the user types, hide stale results and
+  // soft-prompt them — but don't fire requests until they hit Search.
+  if (slugInput) {
+    slugInput.addEventListener('input', App.debounce(() => {
+      const raw = (slugInput.value || '').trim();
+      if (raw.length === 0) { hideResult(); return; }
+      // Live preflight check — same as before, but now drives the fancy card.
+      runSearch();
+    }, 300));
+  }
+  if (brandSel) brandSel.addEventListener('change', () => {
+    if ((slugInput.value || '').trim().length >= 3) runSearch();
+  });
+  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
 })();

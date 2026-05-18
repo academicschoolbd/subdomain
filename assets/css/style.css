@@ -2075,3 +2075,188 @@ html[data-theme="dark"] .activity-item__body small code { background: rgba(255,2
     grid-column: 3; grid-row: 1;
   }
 }
+
+
+
+/* ===========================================================================
+   v3.2 — Search result card on the homepage hero
+   =========================================================================== */
+
+.search-result {
+  margin: 18px auto 0;
+  max-width: 720px;
+  background: #fff;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-md);
+  padding: 16px 20px;
+  text-align: left;
+  animation: searchResultIn 220ms cubic-bezier(.2, .9, .25, 1) both;
+}
+@keyframes searchResultIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.search-result__main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.search-result__ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+}
+.search-result__body { flex: 1 1 220px; min-width: 220px; }
+.search-result__title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--c-text);
+  letter-spacing: -.01em;
+}
+.search-result__sub {
+  margin: 4px 0 0;
+  color: var(--c-muted);
+  font-size: .9rem;
+  line-height: 1.45;
+}
+.search-result .btn { white-space: nowrap; }
+
+.search-result--ok   { border-color: rgba(16, 185, 129, .35); background: linear-gradient(180deg, rgba(16,185,129,.04), #fff 60%); }
+.search-result--ok   .search-result__ico { color: var(--c-success); background: rgba(16,185,129,.12); }
+.search-result--ok   .search-result__title { color: var(--c-success); }
+
+.search-result--bad  { border-color: rgba(244, 63, 94, .35); background: linear-gradient(180deg, rgba(244,63,94,.04), #fff 60%); }
+.search-result--bad  .search-result__ico { color: var(--c-danger);  background: rgba(244,63,94,.12); }
+.search-result--bad  .search-result__title { color: var(--c-danger); }
+
+.search-result--info .search-result__ico { color: var(--c-muted);   background: rgba(100,116,139,.12); }
+
+.search-result__alt {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--c-border);
+}
+.search-result__alt-label {
+  display: block;
+  font-size: .8rem;
+  color: var(--c-muted);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.search-result__alt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+}
+.search-result__alt-row code {
+  background: transparent;
+  padding: 0;
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+html[data-theme="dark"] .search-result {
+  background: var(--c-surface-2);
+  border-color: var(--c-border-strong);
+}
+html[data-theme="dark"] .search-result--ok  { background: linear-gradient(180deg, rgba(16,185,129,.10), var(--c-surface-2) 60%); }
+html[data-theme="dark"] .search-result--bad { background: linear-gradient(180deg, rgba(244,63,94,.10), var(--c-surface-2) 60%); }
+html[data-theme="dark"] .search-result__alt-row { background: var(--c-surface); border-color: var(--c-border-strong); }
+html[data-theme="dark"] .search-result__alt-row code { color: var(--c-text); }
+
+
+
+/* ===========================================================================
+   v3.2 — Support payment cards (dashboard "Support Developer" pane)
+   =========================================================================== */
+.pay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+.pay-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pay-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.pay-card__head strong { font-size: .95rem; }
+.pay-card__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.pay-card__num {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--c-bg);
+  border: 1px dashed var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+.pay-card__num code {
+  flex: 1;
+  background: transparent;
+  padding: 0;
+  font-size: .95rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.pay-card__note { margin: 0; font-size: .85rem; color: var(--c-muted); line-height: 1.5; }
+.pay-card__qr { font-size: .85rem; color: var(--c-primary); font-weight: 600; }
+
+html[data-theme="dark"] .pay-card {
+  background: var(--c-surface-2);
+  border-color: var(--c-border-strong);
+}
+html[data-theme="dark"] .pay-card__num { background: var(--c-surface); border-color: var(--c-border-strong); }
+
+/* ===========================================================================
+   v3.2 — DNS records table (manage modal + admin)
+   =========================================================================== */
+.dns-table th,
+.dns-table td { vertical-align: middle; }
+.dns-table code {
+  background: var(--c-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: .85rem;
+}
+.dns-form {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  margin-top: 12px;
+}
+html[data-theme="dark"] .dns-form { background: var(--c-surface-2); border-color: var(--c-border-strong); }
+html[data-theme="dark"] .dns-table code { background: var(--c-surface); }

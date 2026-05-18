@@ -351,3 +351,35 @@ function route_public_sitemap(array $CONFIG): void
     echo "</urlset>\n";
     exit;
 }
+
+
+/* =================================================================== */
+/*  v3.2 — public-facing "Support the developer" payment methods         */
+/* =================================================================== */
+
+/** GET /api/support/payments — list visible-only payment methods.
+ *  Used by the dashboard's "Support Developer" pane. */
+function route_public_support_payments(array $CONFIG): void
+{
+    try {
+        $stmt = db($CONFIG)->query(
+            "SELECT id, method, label, number, note, qr_url, sort_order
+               FROM support_payments
+              WHERE visible = 1
+           ORDER BY sort_order ASC, id ASC"
+        );
+        $items = array_map(static function ($r) {
+            return [
+                'id'     => (int)$r['id'],
+                'method' => (string)$r['method'],
+                'label'  => (string)$r['label'],
+                'number' => $r['number'] !== null ? (string)$r['number'] : null,
+                'note'   => $r['note']   !== null ? (string)$r['note']   : null,
+                'qr_url' => $r['qr_url'] !== null ? (string)$r['qr_url'] : null,
+            ];
+        }, $stmt->fetchAll());
+    } catch (PDOException $e) {
+        $items = [];
+    }
+    send_json(['items' => $items]);
+}
