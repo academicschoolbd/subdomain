@@ -1,4 +1,4 @@
-# Free Subdomain Platform — cPanel install guide  (v3.0)
+# Free Subdomain Platform — cPanel install guide  (v3.2)
 
 This guide gets `institution.bd` and `smartschool.bd` running on a standard
 **cPanel** shared host (PHP 8.0+) with:
@@ -6,18 +6,26 @@ This guide gets `institution.bd` and `smartschool.bd` running on a standard
 - **Instant-claim mode** (default) — type a name, click once, you're live.
   No documents, no admin review until you flip the toggle in `/admin`.
 - **Email + password sign-in** with a built-in **forgot-password** flow
-  (60-minute single-use token).
+  (60-minute single-use token), and a real **SMTP gateway** so reset
+  links actually arrive in users' inboxes.
 - **Social sign-in** (Google / Facebook / GitHub) — optional.
-- **Cloudflare auto-DNS** — approved claims get a record created automatically.
+- **Cloudflare auto-DNS** — approved claims get an A record automatically.
+- **Owner-managed DNS records** — once verified, owners can add A / AAAA
+  / CNAME / TXT / MX / NS records straight from their dashboard.
+- **Admin-managed payment methods** for the dashboard's "Support
+  Developer" pane (bKash / Nagad / Rocket etc.).
+- **Server-side SEO** on `/i/<brand>/<slug>` — proper title / OG /
+  Twitter / JSON-LD before any JS runs.
+- **Per-user claim throttle** (5/hour, admins exempt).
 - WhatsApp floating support button + community band.
 - Dashboard with editable profile, claim withdraw, DNS status panel.
-- Admin console with moderation queue, reserved slugs, audit log, CSV
-  exports, and a Settings tab to toggle instant-claim / require-documents /
-  Cloudflare-auto-DNS without editing any PHP.
-- Auto-generated `/sitemap.xml`, `robots.txt`, PWA manifest, dark mode,
-  JSON-LD on institution pages.
+- Admin console with moderation queue (bulk decide), user roles,
+  reserved slugs, audit log, CSV exports, and a Settings tab to toggle
+  instant-claim / require-documents / Cloudflare-auto-DNS without
+  editing any PHP.
+- Auto-generated `/sitemap.xml`, `robots.txt`, PWA manifest, dark mode.
 
-Total time: about 10 minutes (15 if you also wire OAuth or Cloudflare).
+Total time: about 10 minutes (15 if you also wire OAuth, Cloudflare or SMTP).
 
 ---
 
@@ -418,6 +426,16 @@ Check the browser console.
 **Cloudflare auto-DNS silently fails** — open the claim from the admin
 queue, the DNS panel shows the exact Cloudflare API error. Most common
 cause: token doesn't have `Zone:DNS:Edit` for that zone.
+
+**Password-reset email never arrives** — Admin → Integrations →
+Outbound email. Set transport to "SMTP", paste a working host / port /
+user / pass (Gmail, SendGrid, Mailgun, Amazon SES, or the cPanel mailbox
+you set up for `no-reply@<your-domain>`). Trigger another forgot-password
+request and check your error log if it still fails — `mail.php` writes
+one diagnostic line per failure.
+
+**Owner can't add a DNS record** — the institution must be `verified`.
+Pending / needs-info / rejected claims don't expose the DNS editor.
 
 **Frontend loads but API returns CORS errors** — frontend and API on
 different origins. Set `cors_allow_origin` to your frontend origin (or

@@ -278,15 +278,35 @@ function route_auth_forgot_password(array $CONFIG): void
             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
             $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
         }
-        $resp['reset_url'] = $base . '/reset-password.php?token=' . $token;
+        $resetUrl = $base . '/reset-password.php?token=' . $token;
+        $brand    = (string)($CONFIG['brand_name'] ?? 'institution.bd');
+
+        // v3.2 — actually send the email when SMTP / mail() is configured.
+        // The transport is picked automatically by mail_send().
+        $sent = mail_send($CONFIG, [
+            'to'      => $email,
+            'subject' => 'Reset your ' . $brand . ' password',
+            'text'    => "Hi,\n\n"
+                       . "We received a request to reset your $brand password. Click the link below within 60 minutes to choose a new one:\n\n"
+                       . $resetUrl . "\n\n"
+                       . "If you didn't request this, you can safely ignore this message — your password won't change.\n\n"
+                       . "— $brand",
+            'html'    => '<p>Hi,</p>'
+                       . '<p>We received a request to reset your <strong>' . htmlspecialchars($brand) . '</strong> password. Click the button below within 60 minutes to choose a new one:</p>'
+                       . '<p><a href="' . htmlspecialchars($resetUrl) . '" style="display:inline-block;padding:10px 18px;background:#0f766e;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset password</a></p>'
+                       . '<p style="font-size:.85rem;color:#64748b;">Or copy this URL: <code>' . htmlspecialchars($resetUrl) . '</code></p>'
+                       . '<p style="font-size:.85rem;color:#64748b;">If you didn\'t request this, you can safely ignore this message — your password won\'t change.</p>'
+                       . '<p>— ' . htmlspecialchars($brand) . '</p>',
+        ]);
+        audit($CONFIG, (int)$row['id'], null, 'auth.reset_email.' . ($sent ? 'sent' : 'failed'));
+
         if (!empty($CONFIG['demo_mode'])) {
+            // Demo only — surface the URL so admins can test without email.
+            $resp['reset_url'] = $resetUrl;
             $resp['dev_token'] = $token;
-            $resp['dev_note']  = 'Demo mode: token returned in response. Plug an SMTP gateway and email the reset_url to the user instead.';
-        } else {
-            // Production: only return ok:true so we don't leak the token in
-            // browser dev-tools / proxy logs to a non-owner.
-            unset($resp['reset_url']);
+            $resp['dev_note']  = 'Demo mode: token returned in response. In production we email reset_url to the user.';
         }
+        // Production: never leak the token; only ok:true on the wire.
     }
     send_json($resp);
 }

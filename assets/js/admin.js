@@ -848,6 +848,7 @@
               ${fld('site.url', 'Public site URL', { placeholder: 'https://institution.bd', help: 'Used to build OAuth redirect URIs and absolute links. No trailing slash.' })}
               ${fld('brand.name', 'Brand name', { placeholder: 'institution.bd' })}
               ${fld('brand.tagline', 'Brand tagline', { placeholder: 'Free verified subdomains for Bangladeshi institutions', wide: true })}
+              ${fld('nameservers', 'Nameservers (comma- or space-separated)', { placeholder: 'amir.ns.cloudflare.com, tia.ns.cloudflare.com', help: 'Shown on every owner\'s "Nameservers" tab. Leave blank to use the Cloudflare placeholder.', wide: true })}
             </div>
           </details>
 
@@ -887,6 +888,34 @@
               ${fld('whatsapp.community_url', 'Community invite URL', { placeholder: 'https://chat.whatsapp.com/…', wide: true })}
               ${fld('whatsapp.community_title', 'Community card title', { placeholder: 'Join our WhatsApp community' })}
               ${fld('whatsapp.community_subtitle', 'Community card subtitle', { placeholder: 'Get announcements, support and meet other admins.' })}
+            </div>
+          </details>
+
+          <details class="card" style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">Outbound email (password reset)</summary>
+            <p class="text-muted mt-2" style="margin-top:8px;">Pick "SMTP" to use Gmail, SendGrid, Mailgun, SES or your cPanel mailbox. Pick "PHP mail()" to use the server's local sendmail (zero config, weaker deliverability).</p>
+            <div class="form-grid mt-3">
+              <div class="field">
+                <label class="label">Transport</label>
+                <select name="mail.transport">
+                  <option value="mail" ${val('mail.transport') === 'mail' || val('mail.transport') === '' ? 'selected' : ''}>PHP mail() — local sendmail</option>
+                  <option value="smtp" ${val('mail.transport') === 'smtp' ? 'selected' : ''}>SMTP (recommended)</option>
+                </select>
+              </div>
+              ${fld('mail.from_email', 'From address',  { placeholder: 'no-reply@institution.bd' })}
+              ${fld('mail.from_name',  'From name',     { placeholder: 'institution.bd' })}
+              ${fld('mail.smtp_host',  'SMTP host',     { placeholder: 'smtp.gmail.com' })}
+              ${fld('mail.smtp_port',  'SMTP port',     { placeholder: '587' })}
+              <div class="field">
+                <label class="label">Encryption</label>
+                <select name="mail.smtp_secure">
+                  <option value="tls" ${val('mail.smtp_secure') === 'tls' || val('mail.smtp_secure') === '' ? 'selected' : ''}>STARTTLS (587)</option>
+                  <option value="ssl" ${val('mail.smtp_secure') === 'ssl' ? 'selected' : ''}>Implicit TLS (465)</option>
+                  <option value=""    ${val('mail.smtp_secure') === 'none' ? 'selected' : ''}>None (port 25, not recommended)</option>
+                </select>
+              </div>
+              ${fld('mail.smtp_user',  'SMTP username', { placeholder: 'apikey or full email' })}
+              ${fld('mail.smtp_pass',  'SMTP password / API key', { placeholder: 'paste secret' })}
             </div>
           </details>
 

@@ -364,22 +364,80 @@
     const c = _claims.find((x) => x.id === id);
     if (!c) { App.toast('Could not find that domain', 'error'); return; }
     manageBg.classList.add('open');
+    // v3.2 — registrar-style tabbed manage modal. For verified domains we
+    // open straight to "DNS records" so users see what they came for. For
+    // pending/needs-info/rejected/seeded claims (which don't have DNS yet)
+    // we default to the Profile tab.
+    const isVerified = (c.status === 'verified');
+    const initialTab = isVerified ? 'dns' : 'profile';
+
+    const tabs = [
+      { id: 'dns',     label: 'DNS records', show: isVerified },
+      { id: 'ns',      label: 'Nameservers', show: isVerified },
+      { id: 'profile', label: 'Profile',     show: true },
+      { id: 'brand',   label: 'Branding',    show: true },
+      { id: 'docs',    label: 'Documents',   show: true },
+      { id: 'notices', label: 'Notices',     show: isVerified },
+    ].filter((t) => t.show);
+
     manageBody.innerHTML = `
       <header class="manage-head">
-        <div>
-          <h2 style="margin:0;">${App.escapeHtml(c.name_en || c.subdomain)}</h2>
-          <p class="text-muted" style="margin:.2em 0;"><code>${App.escapeHtml(c.subdomain)}</code></p>
-          <div class="badges">${statusPill(c.status)} <span class="badge badge--brand">${App.escapeHtml(c.brand)}</span></div>
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <div>
+            <h2 style="margin:0;">${App.escapeHtml(c.name_en || c.subdomain)}</h2>
+            <p class="text-muted" style="margin:.2em 0;"><code>${App.escapeHtml(c.subdomain)}</code></p>
+            <div class="badges">${statusPill(c.status)} <span class="badge badge--brand">${App.escapeHtml(c.brand)}</span></div>
+          </div>
+          ${isVerified ? `<a class="btn btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(c.subdomain)}">Open ${App.escapeHtml(c.subdomain)} →</a>` : ''}
         </div>
       </header>
 
       ${c.review_notes ? `<p class="text-muted mt-3"><strong>Reviewer note:</strong> ${App.escapeHtml(c.review_notes)}</p>` : ''}
 
-      ${dnsPanel(c)}
+      <nav class="tabs mt-3" data-manage-tabs>
+        ${tabs.map((t) => `
+          <button class="tab${t.id === initialTab ? ' active' : ''}" type="button" data-manage-tab="${t.id}">${App.escapeHtml(t.label)}</button>
+        `).join('')}
+      </nav>
 
-      <div class="grid-2 mt-3">
-        <div>
-          <h4>Profile</h4>
+      <!-- ============= DNS records pane (default for verified) ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="dns">
+        ${dnsPanel(c)}
+        <div class="card dash-card mt-3" style="padding:16px 18px;">
+          <h4 style="margin:0 0 4px;">Manage DNS records</h4>
+          <p class="text-muted" style="margin:0 0 6px;font-size:.9rem;">
+            Edit the records that point <code>${App.escapeHtml(c.subdomain)}</code> at your hosting.
+            Use <code>@</code> for the apex; A / AAAA / CNAME / TXT / MX / NS are supported.
+          </p>
+          <div data-dns-host="${c.id}"></div>
+        </div>
+      </section>` : ''}
+
+      <!-- ============= Nameservers pane ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="ns" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Nameservers</h4>
+          <p class="text-muted" style="margin:0 0 10px;">
+            Your subdomain is hosted on <strong>${App.escapeHtml(c.brand)}</strong>'s nameservers — you don't change these.
+            They're listed here so you can verify propagation.
+          </p>
+          <div class="dash-table-wrap" data-ns-host="${c.id}">
+            <div class="skeleton" style="height:80px;"></div>
+          </div>
+          <p class="text-muted mt-3" style="font-size:.88rem;">
+            Want different nameservers for a sub-label (e.g. <code>customer.${App.escapeHtml(c.subdomain)}</code>)?
+            Add an <code>NS</code> record from the <a href="#" data-manage-tab-jump="dns">DNS records</a> tab.
+          </p>
+        </div>
+      </section>` : ''}
+
+      <!-- ============= Profile pane ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="profile" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Institution profile</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">Shown on the public <code>${App.escapeHtml(c.subdomain)}</code> page.</p>
           <form data-form-profile="${c.id}" class="form-grid">
             <div class="field"><label class="label">Name (English)</label><input name="name_en" value="${App.escapeHtml(c.name_en || '')}" /></div>
             <div class="field"><label class="label">নাম (বাংলা)</label><input name="name_bn" value="${App.escapeHtml(c.name_bn || '')}" /></div>
@@ -407,17 +465,33 @@
             <div class="field field--wide text-right"><button class="btn btn--primary" type="submit">Save changes</button></div>
           </form>
         </div>
-        <div>
-          <h4>Images</h4>
-          <p class="label">Logo</p>
-          ${imgBlock(c.logo_url, 'No logo yet')}
-          <form data-form-image="${c.id}" data-kind="logo"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload logo</button></form>
-          <p class="label mt-3">Banner</p>
-          ${imgBlock(c.banner_url, 'No banner yet')}
-          <form data-form-image="${c.id}" data-kind="banner"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload banner</button></form>
+      </section>
 
-          <h4 class="mt-4">Documents</h4>
-          <form data-form-doc="${c.id}">
+      <!-- ============= Branding pane (logo + banner) ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="brand" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Logo &amp; banner</h4>
+          <div class="grid-2 mt-2">
+            <div>
+              <p class="label">Logo</p>
+              ${imgBlock(c.logo_url, 'No logo yet')}
+              <form data-form-image="${c.id}" data-kind="logo" class="mt-2"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload logo</button></form>
+            </div>
+            <div>
+              <p class="label">Banner</p>
+              ${imgBlock(c.banner_url, 'No banner yet')}
+              <form data-form-image="${c.id}" data-kind="banner" class="mt-2"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload banner</button></form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============= Documents pane ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="docs" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Verification documents</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">EIIN certificate, board letter, trade license or admin NID. Only admins can read these.</p>
+          <form data-form-doc="${c.id}" class="flex" style="flex-wrap:wrap;gap:8px;">
             <select name="doc_type">
               <option value="eiin_certificate">EIIN certificate</option>
               <option value="board_letter">Board letter</option>
@@ -425,32 +499,30 @@
               <option value="nid">Admin NID</option>
               <option value="other">Other</option>
             </select>
-            <input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" class="mt-2" />
-            <button class="btn btn--sm mt-2" type="submit">Upload document</button>
+            <input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" />
+            <button class="btn btn--sm" type="submit">Upload document</button>
           </form>
-          <div data-docs="${c.id}" class="docs-list mt-2"></div>
+          <div data-docs="${c.id}" class="docs-list mt-3"></div>
         </div>
-      </div>
+      </section>
 
-      ${c.status === 'verified' ? `
-      <div class="mt-4">
-        <h4>Notices</h4>
-        <form data-form-notice="${c.id}" class="form-grid">
-          <div class="field field--wide"><label class="label">Title</label><input name="title" required /></div>
-          <div class="field field--wide"><label class="label">Body</label><textarea name="body" rows="3" required></textarea></div>
-          <div class="field field--wide flex-between">
-            <label><input type="checkbox" name="pinned" /> Pin to top</label>
-            <button class="btn btn--primary" type="submit">Publish notice</button>
-          </div>
-        </form>
-        <div data-notices="${c.id}" class="mt-3"></div>
-      </div>` : ''}
-
-      ${c.status === 'verified' ? `
-      <div class="mt-4">
-        <h4>DNS records</h4>
-        <div data-dns-host="${c.id}"></div>
-      </div>` : ''}
+      <!-- ============= Notices pane ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="notices" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Notice board</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">Posted notices show on <code>${App.escapeHtml(c.subdomain)}</code>.</p>
+          <form data-form-notice="${c.id}" class="form-grid">
+            <div class="field field--wide"><label class="label">Title</label><input name="title" required /></div>
+            <div class="field field--wide"><label class="label">Body</label><textarea name="body" rows="3" required></textarea></div>
+            <div class="field field--wide flex-between">
+              <label><input type="checkbox" name="pinned" /> Pin to top</label>
+              <button class="btn btn--primary" type="submit">Publish notice</button>
+            </div>
+          </form>
+          <div data-notices="${c.id}" class="mt-3"></div>
+        </div>
+      </section>` : ''}
 
       <footer class="manage-foot mt-4">
         ${['pending','needs_info','rejected'].includes(c.status)
@@ -459,10 +531,33 @@
         <button class="btn" type="button" data-manage-close-2>Close</button>
       </footer>
     `;
+
+    // Tab switcher.
+    const panes = manageBody.querySelectorAll('[data-manage-pane]');
+    manageBody.querySelectorAll('[data-manage-tab]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const want = b.getAttribute('data-manage-tab');
+        manageBody.querySelectorAll('[data-manage-tab]').forEach((x) => {
+          x.classList.toggle('active', x === b);
+        });
+        panes.forEach((p) => { p.hidden = p.getAttribute('data-manage-pane') !== want; });
+      });
+    });
+    // Inline anchors that jump between tabs (e.g. "go to DNS records").
+    manageBody.querySelectorAll('[data-manage-tab-jump]').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const want = a.getAttribute('data-manage-tab-jump');
+        const btn = manageBody.querySelector('[data-manage-tab="' + want + '"]');
+        if (btn) btn.click();
+      });
+    });
+
     wireManageInternals(c.id);
     loadDocs(c.id);
-    if (c.status === 'verified') loadNotices(c.id);
-    if (c.status === 'verified') loadDnsRecords(c.id);
+    if (isVerified) loadNotices(c.id);
+    if (isVerified) loadDnsRecords(c.id);
+    if (isVerified) loadNameservers(c.id, c.brand);
     const x = manageBody.querySelector('[data-manage-close-2]');
     if (x) x.addEventListener('click', closeManage);
 
@@ -736,6 +831,42 @@
         } else { App.toast(e.detail || 'Could not update password', 'error'); }
       }
     });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Nameservers tab (registrar-style read-only list)          */
+  /* ---------------------------------------------------------------- */
+  async function loadNameservers(claimId, brand) {
+    const host = manageBody && manageBody.querySelector('[data-ns-host="' + claimId + '"]');
+    if (!host) return;
+    try {
+      const s = await App.getSettings();
+      const ns = (s && s.nameservers) || ['amir.ns.cloudflare.com', 'tia.ns.cloudflare.com'];
+      host.innerHTML = `
+        <table class="dash-table">
+          <thead><tr><th>#</th><th>Nameserver</th><th>Notes</th></tr></thead>
+          <tbody>
+            ${ns.map((n, i) => `
+              <tr>
+                <td>NS${i + 1}</td>
+                <td><code>${App.escapeHtml(n)}</code></td>
+                <td class="text-muted">
+                  Read-only · managed by ${App.escapeHtml(brand)}
+                  <button type="button" class="btn btn--ghost btn--sm" data-copy-ns="${App.escapeHtml(n)}" style="margin-left:8px;">Copy</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+      host.querySelectorAll('[data-copy-ns]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const v = b.getAttribute('data-copy-ns') || '';
+          try { await navigator.clipboard.writeText(v); App.toast('Copied ' + v, 'success'); }
+          catch { App.toast('Could not copy', 'error'); }
+        });
+      });
+    } catch (e) {
+      host.innerHTML = '<p class="text-muted">Could not load nameservers.</p>';
+    }
   }
 
   /* ---------------------------------------------------------------- */

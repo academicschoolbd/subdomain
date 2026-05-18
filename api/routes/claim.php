@@ -65,6 +65,28 @@ function route_claim_submit(array $CONFIG): void
         ], 422);
     }
 
+    // v3.2 — light per-user rate limit: 5 NEW claims per hour per account.
+    // Uses the audit_log we already write on every successful claim. Admins
+    // are exempt so they can seed institutions in bulk.
+    if (empty($u['is_admin'])) {
+        try {
+            $stmt = db($CONFIG)->prepare(
+                "SELECT COUNT(*) c FROM audit_log
+                  WHERE actor_user_id = ?
+                    AND action IN ('claim.create', 'claim.seeded_taken')
+                    AND created_at > ?"
+            );
+            $stmt->execute([(int)$u['id'], date('Y-m-d H:i:s', time() - 3600)]);
+            if ((int)$stmt->fetch()['c'] >= 5) {
+                send_error(
+                    'Too many claims in the last hour. Please wait a bit before submitting another — '
+                  . 'or contact support if you need to onboard several institutions at once.',
+                    429
+                );
+            }
+        } catch (PDOException $e) { /* never block on a counter glitch */ }
+    }
+
     $data = read_json_body();
     $brand = require_param($data, 'brand');
     if (!in_array($brand, $CONFIG['brands'], true)) {
