@@ -65,6 +65,28 @@ function route_claim_submit(array $CONFIG): void
         ], 422);
     }
 
+    // v3.2 — light per-user rate limit: 5 NEW claims per hour per account.
+    // Uses the audit_log we already write on every successful claim. Admins
+    // are exempt so they can seed institutions in bulk.
+    if (empty($u['is_admin'])) {
+        try {
+            $stmt = db($CONFIG)->prepare(
+                "SELECT COUNT(*) c FROM audit_log
+                  WHERE actor_user_id = ?
+                    AND action IN ('claim.create', 'claim.seeded_taken')
+                    AND created_at > ?"
+            );
+            $stmt->execute([(int)$u['id'], date('Y-m-d H:i:s', time() - 3600)]);
+            if ((int)$stmt->fetch()['c'] >= 5) {
+                send_error(
+                    'Too many claims in the last hour. Please wait a bit before submitting another — '
+                  . 'or contact support if you need to onboard several institutions at once.',
+                    429
+                );
+            }
+        } catch (PDOException $e) { /* never block on a counter glitch */ }
+    }
+
     $data = read_json_body();
     $brand = require_param($data, 'brand');
     if (!in_array($brand, $CONFIG['brands'], true)) {
@@ -394,5 +416,208 @@ function route_tenant_notice_delete(array $CONFIG, int $instId, int $noticeId): 
     _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
     db($CONFIG)->prepare('DELETE FROM notices WHERE id = ? AND institution_id = ?')->execute([$noticeId, $instId]);
     audit($CONFIG, (int)$u['id'], $instId, 'tenant.notice.delete', (string)$noticeId);
+    send_json(['ok' => true]);
+}
+
+
+/* =================================================================== */
+/*  v3.2 — owner-managed DNS records for verified subdomains            */
+/* =================================================================== */
+
+const DNS_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS'];
+
+function _dns_row(array $r): array
+{
+    return [
+        'id'            => (int)$r['id'],
+        'institution_id'=> (int)$r['institution_id'],
+        'type'          => (string)$r['type'],
+        'name'          => (string)$r['name'],
+        'content'       => (string)$r['content'],
+        'ttl'           => (int)($r['ttl'] ?? 1),
+        'priority'      => $r['priority'] !== null && $r['priority'] !== '' ? (int)$r['priority'] : null,
+        'proxied'       => (bool)($r['proxied'] ?? 0),
+        'cf_record_id'  => $r['cf_record_id'] ?? null,
+        'cf_status'     => $r['cf_status'] ?? null,
+        'cf_message'    => $r['cf_message'] ?? null,
+        'created_at'    => $r['created_at'] ?? null,
+        'updated_at'    => $r['updated_at'] ?? null,
+    ];
+}
+
+function _dns_validate(array $data): array
+{
+    $errors = [];
+    $type = strtoupper(trim((string)($data['type'] ?? 'A')));
+    if (!in_array($type, DNS_TYPES, true)) {
+        $errors['type'] = 'Type must be one of: ' . implode(', ', DNS_TYPES);
+    }
+    $name = trim((string)($data['name'] ?? '@'));
+    if ($name === '') $name = '@';
+    if (strlen($name) > 120) {
+        $errors['name'] = 'Name is too long (max 120 chars).';
+    } elseif ($name !== '@' && !preg_match('/^[a-z0-9](?:[a-z0-9._\-]*[a-z0-9])?$/i', $name)) {
+        $errors['name'] = 'Name must contain only letters, digits, dots and hyphens.';
+    }
+    $content = trim((string)($data['content'] ?? ''));
+    if ($content === '') $errors['content'] = 'Content is required.';
+    if (strlen($content) > 512) $errors['content'] = 'Content is too long (max 512 chars).';
+    $ttl = (int)($data['ttl'] ?? 1);
+    if ($ttl < 0) $ttl = 1;
+    $priority = null;
+    if ($type === 'MX') {
+        $priority = isset($data['priority']) && $data['priority'] !== '' ? (int)$data['priority'] : 10;
+        if ($priority < 0 || $priority > 65535) $errors['priority'] = 'MX priority must be 0–65535.';
+    }
+    $proxied = false;
+    if (in_array($type, ['A', 'AAAA', 'CNAME'], true)) {
+        $proxied = !empty($data['proxied']);
+    }
+    return [$errors, [
+        'type' => $type, 'name' => $name, 'content' => $content,
+        'ttl' => $ttl, 'priority' => $priority, 'proxied' => $proxied,
+    ]];
+}
+
+/** GET /api/tenant/{id}/dns — list every DNS record on this institution. */
+function route_tenant_dns_list(array $CONFIG, int $instId): void
+{
+    $u = require_user($CONFIG);
+    $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    if ($inst['status'] !== 'verified') {
+        send_error('DNS records are only available after the subdomain is verified.', 409);
+    }
+    $stmt = db($CONFIG)->prepare(
+        'SELECT * FROM dns_records WHERE institution_id = ? ORDER BY id ASC'
+    );
+    $stmt->execute([$instId]);
+    $items = array_map('_dns_row', $stmt->fetchAll());
+    send_json([
+        'items'           => $items,
+        'subdomain'       => $inst['slug'] . '.' . $inst['brand'],
+        'cf_configured'   => cf_enabled($CONFIG, $inst['brand']),
+    ]);
+}
+
+/** POST /api/tenant/{id}/dns — create a new DNS record. */
+function route_tenant_dns_create(array $CONFIG, int $instId): void
+{
+    $u = require_user($CONFIG);
+    $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    if ($inst['status'] !== 'verified') {
+        send_error('Subdomain must be verified before adding DNS records.', 409);
+    }
+    $data = read_json_body();
+    [$errors, $clean] = _dns_validate($data);
+    if ($errors) send_json(['detail' => 'Invalid input', 'errors' => $errors], 422);
+
+    // Push to Cloudflare (best-effort).
+    $cf = cf_create_arbitrary_record(
+        $CONFIG, $inst['brand'], $inst['slug'],
+        $clean['type'], $clean['name'], $clean['content'],
+        $clean['ttl'], $clean['priority'], $clean['proxied']
+    );
+
+    $now = db_now($CONFIG);
+    $pdo = db($CONFIG);
+    $pdo->prepare(
+        'INSERT INTO dns_records
+          (institution_id, type, name, content, ttl, priority, proxied,
+           cf_record_id, cf_status, cf_message, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+    )->execute([
+        $instId, $clean['type'], $clean['name'], $clean['content'],
+        $clean['ttl'], $clean['priority'], $clean['proxied'] ? 1 : 0,
+        $cf['record_id'], $cf['status'] ?? ($cf['ok'] ? 'live' : 'manual'),
+        $cf['message'], $now, $now,
+    ]);
+    $id = (int)$pdo->lastInsertId();
+    audit($CONFIG, (int)$u['id'], $instId, 'tenant.dns.create',
+        $clean['type'] . ' ' . $clean['name'] . ' → ' . $clean['content']);
+    $stmt = $pdo->prepare('SELECT * FROM dns_records WHERE id = ?');
+    $stmt->execute([$id]);
+    send_json(['ok' => true, 'record' => _dns_row($stmt->fetch()), 'cf' => $cf]);
+}
+
+/** PATCH /api/tenant/{id}/dns/{rid} — update a record. */
+function route_tenant_dns_update(array $CONFIG, int $instId, int $recId): void
+{
+    $u = require_user($CONFIG);
+    $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    if ($inst['status'] !== 'verified') {
+        send_error('Subdomain must be verified.', 409);
+    }
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT * FROM dns_records WHERE id = ? AND institution_id = ?');
+    $stmt->execute([$recId, $instId]);
+    $row = $stmt->fetch();
+    if (!$row) send_error('Record not found', 404);
+
+    $data = read_json_body();
+    // Merge incoming fields onto current row so partial updates work.
+    $merged = [
+        'type'     => $data['type']     ?? $row['type'],
+        'name'     => $data['name']     ?? $row['name'],
+        'content'  => $data['content']  ?? $row['content'],
+        'ttl'      => $data['ttl']      ?? $row['ttl'],
+        'priority' => array_key_exists('priority', $data) ? $data['priority'] : $row['priority'],
+        'proxied'  => array_key_exists('proxied', $data)  ? $data['proxied']  : $row['proxied'],
+    ];
+    [$errors, $clean] = _dns_validate($merged);
+    if ($errors) send_json(['detail' => 'Invalid input', 'errors' => $errors], 422);
+
+    // Push to Cloudflare. If we previously failed to create, try to create
+    // (we have no record_id); otherwise update in place.
+    if (!empty($row['cf_record_id'])) {
+        $cf = cf_update_arbitrary_record(
+            $CONFIG, $inst['brand'], $inst['slug'], (string)$row['cf_record_id'],
+            $clean['type'], $clean['name'], $clean['content'],
+            $clean['ttl'], $clean['priority'], $clean['proxied']
+        );
+    } else {
+        $cf = cf_create_arbitrary_record(
+            $CONFIG, $inst['brand'], $inst['slug'],
+            $clean['type'], $clean['name'], $clean['content'],
+            $clean['ttl'], $clean['priority'], $clean['proxied']
+        );
+    }
+
+    $now = db_now($CONFIG);
+    $pdo->prepare(
+        'UPDATE dns_records SET type = ?, name = ?, content = ?, ttl = ?,
+         priority = ?, proxied = ?, cf_record_id = ?, cf_status = ?,
+         cf_message = ?, updated_at = ? WHERE id = ?'
+    )->execute([
+        $clean['type'], $clean['name'], $clean['content'], $clean['ttl'],
+        $clean['priority'], $clean['proxied'] ? 1 : 0,
+        $cf['record_id'] ?? $row['cf_record_id'],
+        $cf['status']    ?? ($cf['ok'] ? 'live' : 'manual'),
+        $cf['message'],
+        $now, $recId,
+    ]);
+    audit($CONFIG, (int)$u['id'], $instId, 'tenant.dns.update',
+        $clean['type'] . ' ' . $clean['name'] . ' → ' . $clean['content']);
+    $stmt = $pdo->prepare('SELECT * FROM dns_records WHERE id = ?');
+    $stmt->execute([$recId]);
+    send_json(['ok' => true, 'record' => _dns_row($stmt->fetch()), 'cf' => $cf]);
+}
+
+/** DELETE /api/tenant/{id}/dns/{rid} — delete a record. */
+function route_tenant_dns_delete(array $CONFIG, int $instId, int $recId): void
+{
+    $u = require_user($CONFIG);
+    $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT * FROM dns_records WHERE id = ? AND institution_id = ?');
+    $stmt->execute([$recId, $instId]);
+    $row = $stmt->fetch();
+    if (!$row) send_error('Record not found', 404);
+
+    if (!empty($row['cf_record_id'])) {
+        cf_delete_record($CONFIG, $inst['brand'], (string)$row['cf_record_id'], $inst['slug']);
+    }
+    $pdo->prepare('DELETE FROM dns_records WHERE id = ?')->execute([$recId]);
+    audit($CONFIG, (int)$u['id'], $instId, 'tenant.dns.delete',
+        $row['type'] . ' ' . $row['name']);
     send_json(['ok' => true]);
 }

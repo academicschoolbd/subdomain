@@ -96,7 +96,29 @@ function route_public_settings(array $CONFIG): void
             'configured'      => array_filter($cfBrands) ? true : false,
             'configured_brands' => array_keys(array_filter($cfBrands)),
         ],
+        // v3.2 — registrar-style "your nameservers" panel on the dashboard.
+        // Comma- or whitespace-separated list, configured by the admin in
+        // Integrations → Branding. Falls back to the canonical Cloudflare
+        // pattern so the UI never looks empty.
+        'nameservers' => _split_nameservers((string)($CONFIG['nameservers'] ?? '')),
     ]);
+}
+
+/** Split a free-form string of nameservers into a clean list. */
+function _split_nameservers(string $raw): array
+{
+    $parts = preg_split('/[\s,]+/', trim($raw)) ?: [];
+    $out = [];
+    foreach ($parts as $p) {
+        $p = strtolower(trim($p));
+        if ($p !== '') $out[] = $p;
+    }
+    if (!$out) {
+        // Cloudflare's public docs example pair — purely cosmetic placeholder
+        // until the admin sets their own.
+        $out = ['amir.ns.cloudflare.com', 'tia.ns.cloudflare.com'];
+    }
+    return array_values(array_unique($out));
 }
 
 function route_public_brands(array $CONFIG): void
@@ -350,4 +372,36 @@ function route_public_sitemap(array $CONFIG): void
     }
     echo "</urlset>\n";
     exit;
+}
+
+
+/* =================================================================== */
+/*  v3.2 — public-facing "Support the developer" payment methods         */
+/* =================================================================== */
+
+/** GET /api/support/payments — list visible-only payment methods.
+ *  Used by the dashboard's "Support Developer" pane. */
+function route_public_support_payments(array $CONFIG): void
+{
+    try {
+        $stmt = db($CONFIG)->query(
+            "SELECT id, method, label, number, note, qr_url, sort_order
+               FROM support_payments
+              WHERE visible = 1
+           ORDER BY sort_order ASC, id ASC"
+        );
+        $items = array_map(static function ($r) {
+            return [
+                'id'     => (int)$r['id'],
+                'method' => (string)$r['method'],
+                'label'  => (string)$r['label'],
+                'number' => $r['number'] !== null ? (string)$r['number'] : null,
+                'note'   => $r['note']   !== null ? (string)$r['note']   : null,
+                'qr_url' => $r['qr_url'] !== null ? (string)$r['qr_url'] : null,
+            ];
+        }, $stmt->fetchAll());
+    } catch (PDOException $e) {
+        $items = [];
+    }
+    send_json(['items' => $items]);
 }

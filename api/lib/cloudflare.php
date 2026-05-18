@@ -129,3 +129,128 @@ function cf_delete_record(array $CONFIG, string $brand, ?string $recordId, ?stri
         'message' => $r['ok'] ? 'DNS record deleted' : 'CF delete failed',
     ];
 }
+
+/* ---------------------------------------------------------------- */
+/*  v3.2 — generic owner-editable DNS records (any type)             */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Create an arbitrary DNS record on Cloudflare for a verified tenant.
+ * The `name` parameter is the *label* (e.g. "@", "www", "mail" relative to
+ * `<slug>.<brand>`). When CF isn't configured the helper no-ops with a
+ * `manual` status so the row is still saved locally — that way the admin
+ * can publish it to upstream DNS by hand.
+ *
+ * Returns:
+ *   ['attempted' => bool, 'ok' => bool, 'record_id' => string|null,
+ *    'status' => 'live'|'manual'|'error', 'message' => string]
+ */
+function cf_create_arbitrary_record(
+    array $CONFIG,
+    string $brand,
+    string $slug,
+    string $type,
+    string $name,
+    string $content,
+    int $ttl = 1,
+    ?int $priority = null,
+    bool $proxied = false
+): array {
+    $type = strtoupper(trim($type));
+    if (!cf_enabled($CONFIG, $brand)) {
+        return ['attempted' => false, 'ok' => false, 'record_id' => null,
+                'status' => 'manual', 'message' => 'Cloudflare not configured — record saved locally only.'];
+    }
+    $cf = $CONFIG['cloudflare'];
+    $token = $cf['api_token'];
+    $zoneId = $cf['zones'][$brand];
+    // Build the FQDN: "@" / "" / the bare slug all collapse to the apex of
+    // the tenant subdomain. Anything else is prefixed.
+    $sub = $slug . '.' . $brand;
+    $label = trim($name);
+    $isApex = ($label === '' || $label === '@' || strcasecmp($label, $sub) === 0);
+    $fqdn = $isApex ? $sub : ($label . '.' . $sub);
+
+    // Cloudflare auto-proxies only A/AAAA/CNAME.
+    $supportsProxy = in_array($type, ['A', 'AAAA', 'CNAME'], true);
+    $body = [
+        'type'    => $type,
+        'name'    => $fqdn,
+        'content' => $content,
+        'ttl'     => $ttl > 0 ? $ttl : 1,
+        'proxied' => $supportsProxy ? $proxied : false,
+        'comment' => 'tenant ' . $sub . ' (owner-managed)',
+    ];
+    if ($type === 'MX' && $priority !== null) {
+        $body['priority'] = $priority;
+    }
+    $r = cf_request($token, 'POST',
+        "https://api.cloudflare.com/client/v4/zones/{$zoneId}/dns_records", $body);
+    if ($r['ok'] && isset($r['body']['result']['id'])) {
+        return ['attempted' => true, 'ok' => true,
+                'record_id' => (string)$r['body']['result']['id'],
+                'status' => 'live', 'message' => 'DNS record created'];
+    }
+    $msg = 'Cloudflare error';
+    if (isset($r['body']['errors'][0]['message'])) {
+        $msg = 'Cloudflare: ' . $r['body']['errors'][0]['message'];
+    } elseif (!empty($r['error'])) {
+        $msg = 'Cloudflare network: ' . $r['error'];
+    }
+    return ['attempted' => true, 'ok' => false, 'record_id' => null,
+            'status' => 'error', 'message' => $msg];
+}
+
+/** Update an existing record. Pass the same fields. */
+function cf_update_arbitrary_record(
+    array $CONFIG,
+    string $brand,
+    string $slug,
+    string $recordId,
+    string $type,
+    string $name,
+    string $content,
+    int $ttl = 1,
+    ?int $priority = null,
+    bool $proxied = false
+): array {
+    $type = strtoupper(trim($type));
+    if (!cf_enabled($CONFIG, $brand) || $recordId === '') {
+        return ['attempted' => false, 'ok' => false, 'record_id' => $recordId ?: null,
+                'status' => 'manual', 'message' => 'Cloudflare not configured — record updated locally only.'];
+    }
+    $cf = $CONFIG['cloudflare'];
+    $token = $cf['api_token'];
+    $zoneId = $cf['zones'][$brand];
+    $sub = $slug . '.' . $brand;
+    $label = trim($name);
+    $isApex = ($label === '' || $label === '@' || strcasecmp($label, $sub) === 0);
+    $fqdn = $isApex ? $sub : ($label . '.' . $sub);
+
+    $supportsProxy = in_array($type, ['A', 'AAAA', 'CNAME'], true);
+    $body = [
+        'type'    => $type,
+        'name'    => $fqdn,
+        'content' => $content,
+        'ttl'     => $ttl > 0 ? $ttl : 1,
+        'proxied' => $supportsProxy ? $proxied : false,
+        'comment' => 'tenant ' . $sub . ' (owner-managed)',
+    ];
+    if ($type === 'MX' && $priority !== null) {
+        $body['priority'] = $priority;
+    }
+    $r = cf_request($token, 'PUT',
+        "https://api.cloudflare.com/client/v4/zones/{$zoneId}/dns_records/{$recordId}", $body);
+    if ($r['ok']) {
+        return ['attempted' => true, 'ok' => true, 'record_id' => $recordId,
+                'status' => 'live', 'message' => 'DNS record updated'];
+    }
+    $msg = 'Cloudflare error';
+    if (isset($r['body']['errors'][0]['message'])) {
+        $msg = 'Cloudflare: ' . $r['body']['errors'][0]['message'];
+    } elseif (!empty($r['error'])) {
+        $msg = 'Cloudflare network: ' . $r['error'];
+    }
+    return ['attempted' => true, 'ok' => false, 'record_id' => $recordId,
+            'status' => 'error', 'message' => $msg];
+}

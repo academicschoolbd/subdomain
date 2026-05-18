@@ -220,6 +220,9 @@
               </a>
             </div>
           </div>
+
+          <!-- v3.2 — payment methods host (admin-editable from /admin → Support payments). -->
+          <div data-payments-host class="mt-4"></div>
         </section>
 
       </main>

@@ -122,6 +122,7 @@
         // The Settings pane mounts the account-card the first time it's
         // opened so we don't waste a render on the Overview path.
         if (name === 'settings') renderAccountCard();
+        if (name === 'support')  renderSupportPayments();
       });
     });
 
@@ -363,22 +364,80 @@
     const c = _claims.find((x) => x.id === id);
     if (!c) { App.toast('Could not find that domain', 'error'); return; }
     manageBg.classList.add('open');
+    // v3.2 — registrar-style tabbed manage modal. For verified domains we
+    // open straight to "DNS records" so users see what they came for. For
+    // pending/needs-info/rejected/seeded claims (which don't have DNS yet)
+    // we default to the Profile tab.
+    const isVerified = (c.status === 'verified');
+    const initialTab = isVerified ? 'dns' : 'profile';
+
+    const tabs = [
+      { id: 'dns',     label: 'DNS records', show: isVerified },
+      { id: 'ns',      label: 'Nameservers', show: isVerified },
+      { id: 'profile', label: 'Profile',     show: true },
+      { id: 'brand',   label: 'Branding',    show: true },
+      { id: 'docs',    label: 'Documents',   show: true },
+      { id: 'notices', label: 'Notices',     show: isVerified },
+    ].filter((t) => t.show);
+
     manageBody.innerHTML = `
       <header class="manage-head">
-        <div>
-          <h2 style="margin:0;">${App.escapeHtml(c.name_en || c.subdomain)}</h2>
-          <p class="text-muted" style="margin:.2em 0;"><code>${App.escapeHtml(c.subdomain)}</code></p>
-          <div class="badges">${statusPill(c.status)} <span class="badge badge--brand">${App.escapeHtml(c.brand)}</span></div>
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <div>
+            <h2 style="margin:0;">${App.escapeHtml(c.name_en || c.subdomain)}</h2>
+            <p class="text-muted" style="margin:.2em 0;"><code>${App.escapeHtml(c.subdomain)}</code></p>
+            <div class="badges">${statusPill(c.status)} <span class="badge badge--brand">${App.escapeHtml(c.brand)}</span></div>
+          </div>
+          ${isVerified ? `<a class="btn btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(c.subdomain)}">Open ${App.escapeHtml(c.subdomain)} →</a>` : ''}
         </div>
       </header>
 
       ${c.review_notes ? `<p class="text-muted mt-3"><strong>Reviewer note:</strong> ${App.escapeHtml(c.review_notes)}</p>` : ''}
 
-      ${dnsPanel(c)}
+      <nav class="tabs mt-3" data-manage-tabs>
+        ${tabs.map((t) => `
+          <button class="tab${t.id === initialTab ? ' active' : ''}" type="button" data-manage-tab="${t.id}">${App.escapeHtml(t.label)}</button>
+        `).join('')}
+      </nav>
 
-      <div class="grid-2 mt-3">
-        <div>
-          <h4>Profile</h4>
+      <!-- ============= DNS records pane (default for verified) ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="dns">
+        ${dnsPanel(c)}
+        <div class="card dash-card mt-3" style="padding:16px 18px;">
+          <h4 style="margin:0 0 4px;">Manage DNS records</h4>
+          <p class="text-muted" style="margin:0 0 6px;font-size:.9rem;">
+            Edit the records that point <code>${App.escapeHtml(c.subdomain)}</code> at your hosting.
+            Use <code>@</code> for the apex; A / AAAA / CNAME / TXT / MX / NS are supported.
+          </p>
+          <div data-dns-host="${c.id}"></div>
+        </div>
+      </section>` : ''}
+
+      <!-- ============= Nameservers pane ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="ns" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Nameservers</h4>
+          <p class="text-muted" style="margin:0 0 10px;">
+            Your subdomain is hosted on <strong>${App.escapeHtml(c.brand)}</strong>'s nameservers — you don't change these.
+            They're listed here so you can verify propagation.
+          </p>
+          <div class="dash-table-wrap" data-ns-host="${c.id}">
+            <div class="skeleton" style="height:80px;"></div>
+          </div>
+          <p class="text-muted mt-3" style="font-size:.88rem;">
+            Want different nameservers for a sub-label (e.g. <code>customer.${App.escapeHtml(c.subdomain)}</code>)?
+            Add an <code>NS</code> record from the <a href="#" data-manage-tab-jump="dns">DNS records</a> tab.
+          </p>
+        </div>
+      </section>` : ''}
+
+      <!-- ============= Profile pane ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="profile" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Institution profile</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">Shown on the public <code>${App.escapeHtml(c.subdomain)}</code> page.</p>
           <form data-form-profile="${c.id}" class="form-grid">
             <div class="field"><label class="label">Name (English)</label><input name="name_en" value="${App.escapeHtml(c.name_en || '')}" /></div>
             <div class="field"><label class="label">নাম (বাংলা)</label><input name="name_bn" value="${App.escapeHtml(c.name_bn || '')}" /></div>
@@ -406,17 +465,33 @@
             <div class="field field--wide text-right"><button class="btn btn--primary" type="submit">Save changes</button></div>
           </form>
         </div>
-        <div>
-          <h4>Images</h4>
-          <p class="label">Logo</p>
-          ${imgBlock(c.logo_url, 'No logo yet')}
-          <form data-form-image="${c.id}" data-kind="logo"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload logo</button></form>
-          <p class="label mt-3">Banner</p>
-          ${imgBlock(c.banner_url, 'No banner yet')}
-          <form data-form-image="${c.id}" data-kind="banner"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload banner</button></form>
+      </section>
 
-          <h4 class="mt-4">Documents</h4>
-          <form data-form-doc="${c.id}">
+      <!-- ============= Branding pane (logo + banner) ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="brand" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Logo &amp; banner</h4>
+          <div class="grid-2 mt-2">
+            <div>
+              <p class="label">Logo</p>
+              ${imgBlock(c.logo_url, 'No logo yet')}
+              <form data-form-image="${c.id}" data-kind="logo" class="mt-2"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload logo</button></form>
+            </div>
+            <div>
+              <p class="label">Banner</p>
+              ${imgBlock(c.banner_url, 'No banner yet')}
+              <form data-form-image="${c.id}" data-kind="banner" class="mt-2"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload banner</button></form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============= Documents pane ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="docs" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Verification documents</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">EIIN certificate, board letter, trade license or admin NID. Only admins can read these.</p>
+          <form data-form-doc="${c.id}" class="flex" style="flex-wrap:wrap;gap:8px;">
             <select name="doc_type">
               <option value="eiin_certificate">EIIN certificate</option>
               <option value="board_letter">Board letter</option>
@@ -424,26 +499,30 @@
               <option value="nid">Admin NID</option>
               <option value="other">Other</option>
             </select>
-            <input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" class="mt-2" />
-            <button class="btn btn--sm mt-2" type="submit">Upload document</button>
+            <input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" />
+            <button class="btn btn--sm" type="submit">Upload document</button>
           </form>
-          <div data-docs="${c.id}" class="docs-list mt-2"></div>
+          <div data-docs="${c.id}" class="docs-list mt-3"></div>
         </div>
-      </div>
+      </section>
 
-      ${c.status === 'verified' ? `
-      <div class="mt-4">
-        <h4>Notices</h4>
-        <form data-form-notice="${c.id}" class="form-grid">
-          <div class="field field--wide"><label class="label">Title</label><input name="title" required /></div>
-          <div class="field field--wide"><label class="label">Body</label><textarea name="body" rows="3" required></textarea></div>
-          <div class="field field--wide flex-between">
-            <label><input type="checkbox" name="pinned" /> Pin to top</label>
-            <button class="btn btn--primary" type="submit">Publish notice</button>
-          </div>
-        </form>
-        <div data-notices="${c.id}" class="mt-3"></div>
-      </div>` : ''}
+      <!-- ============= Notices pane ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="notices" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Notice board</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">Posted notices show on <code>${App.escapeHtml(c.subdomain)}</code>.</p>
+          <form data-form-notice="${c.id}" class="form-grid">
+            <div class="field field--wide"><label class="label">Title</label><input name="title" required /></div>
+            <div class="field field--wide"><label class="label">Body</label><textarea name="body" rows="3" required></textarea></div>
+            <div class="field field--wide flex-between">
+              <label><input type="checkbox" name="pinned" /> Pin to top</label>
+              <button class="btn btn--primary" type="submit">Publish notice</button>
+            </div>
+          </form>
+          <div data-notices="${c.id}" class="mt-3"></div>
+        </div>
+      </section>` : ''}
 
       <footer class="manage-foot mt-4">
         ${['pending','needs_info','rejected'].includes(c.status)
@@ -452,9 +531,33 @@
         <button class="btn" type="button" data-manage-close-2>Close</button>
       </footer>
     `;
+
+    // Tab switcher.
+    const panes = manageBody.querySelectorAll('[data-manage-pane]');
+    manageBody.querySelectorAll('[data-manage-tab]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const want = b.getAttribute('data-manage-tab');
+        manageBody.querySelectorAll('[data-manage-tab]').forEach((x) => {
+          x.classList.toggle('active', x === b);
+        });
+        panes.forEach((p) => { p.hidden = p.getAttribute('data-manage-pane') !== want; });
+      });
+    });
+    // Inline anchors that jump between tabs (e.g. "go to DNS records").
+    manageBody.querySelectorAll('[data-manage-tab-jump]').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const want = a.getAttribute('data-manage-tab-jump');
+        const btn = manageBody.querySelector('[data-manage-tab="' + want + '"]');
+        if (btn) btn.click();
+      });
+    });
+
     wireManageInternals(c.id);
     loadDocs(c.id);
-    if (c.status === 'verified') loadNotices(c.id);
+    if (isVerified) loadNotices(c.id);
+    if (isVerified) loadDnsRecords(c.id);
+    if (isVerified) loadNameservers(c.id, c.brand);
     const x = manageBody.querySelector('[data-manage-close-2]');
     if (x) x.addEventListener('click', closeManage);
 
@@ -726,6 +829,270 @@
           const first = Object.keys(e.errors)[0];
           App.toast(e.errors[first], 'error');
         } else { App.toast(e.detail || 'Could not update password', 'error'); }
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Nameservers tab (registrar-style read-only list)          */
+  /* ---------------------------------------------------------------- */
+  async function loadNameservers(claimId, brand) {
+    const host = manageBody && manageBody.querySelector('[data-ns-host="' + claimId + '"]');
+    if (!host) return;
+    try {
+      const s = await App.getSettings();
+      const ns = (s && s.nameservers) || ['amir.ns.cloudflare.com', 'tia.ns.cloudflare.com'];
+      host.innerHTML = `
+        <table class="dash-table">
+          <thead><tr><th>#</th><th>Nameserver</th><th>Notes</th></tr></thead>
+          <tbody>
+            ${ns.map((n, i) => `
+              <tr>
+                <td>NS${i + 1}</td>
+                <td><code>${App.escapeHtml(n)}</code></td>
+                <td class="text-muted">
+                  Read-only · managed by ${App.escapeHtml(brand)}
+                  <button type="button" class="btn btn--ghost btn--sm" data-copy-ns="${App.escapeHtml(n)}" style="margin-left:8px;">Copy</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+      host.querySelectorAll('[data-copy-ns]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const v = b.getAttribute('data-copy-ns') || '';
+          try { await navigator.clipboard.writeText(v); App.toast('Copied ' + v, 'success'); }
+          catch { App.toast('Could not copy', 'error'); }
+        });
+      });
+    } catch (e) {
+      host.innerHTML = '<p class="text-muted">Could not load nameservers.</p>';
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Support Developer payment methods (admin-managed)         */
+  /* ---------------------------------------------------------------- */
+  const PAY_BRAND = {
+    bkash:  { label: 'bKash',  color: '#e2136e' },
+    nagad:  { label: 'Nagad',  color: '#f47216' },
+    rocket: { label: 'Rocket', color: '#8a2be2' },
+    upay:   { label: 'Upay',   color: '#ec1b23' },
+    tap:    { label: 'Tap',    color: '#0ea5e9' },
+    bank:   { label: 'Bank',   color: '#0f766e' },
+    card:   { label: 'Card',   color: '#1f2937' },
+    paypal: { label: 'PayPal', color: '#003087' },
+    crypto: { label: 'Crypto', color: '#f59e0b' },
+    other:  { label: 'Other',  color: '#475569' },
+  };
+  let _paymentsLoaded = false;
+  function renderSupportPayments() {
+    const host = document.querySelector('[data-payments-host]');
+    if (!host || _paymentsLoaded) return;
+    host.innerHTML = '<div class="card"><div class="skeleton" style="height:120px;"></div></div>';
+    App.api('/support/payments').then((r) => {
+      _paymentsLoaded = true;
+      const items = (r && r.items) || [];
+      if (!items.length) { host.innerHTML = ''; return; }
+      host.innerHTML = `
+        <article class="card dash-support">
+          <h3 style="margin-top:0;">Support us with a tip</h3>
+          <p class="text-muted">Every contribution helps us keep institution.bd free for everyone. Send to any of the methods below.</p>
+          <div class="pay-grid">${items.map(payCard).join('')}</div>
+        </article>`;
+      host.querySelectorAll('[data-copy-pay]').forEach((b) => {
+        b.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const text = b.getAttribute('data-copy-pay') || '';
+          try {
+            await navigator.clipboard.writeText(text);
+            App.toast('Copied "' + text + '"', 'success');
+          } catch { App.toast('Could not copy', 'error'); }
+        });
+      });
+    }).catch(() => { host.innerHTML = ''; });
+  }
+  function payCard(p) {
+    const meta = PAY_BRAND[p.method] || PAY_BRAND.other;
+    const num = (p.number || '').trim();
+    return `
+      <div class="pay-card">
+        <header class="pay-card__head">
+          <span class="pay-card__pill" style="background:${meta.color};">${App.escapeHtml(meta.label)}</span>
+          <strong>${App.escapeHtml(p.label)}</strong>
+        </header>
+        ${num ? `
+          <div class="pay-card__num">
+            <code>${App.escapeHtml(num)}</code>
+            <button type="button" class="btn btn--sm" data-copy-pay="${App.escapeHtml(num)}">Copy</button>
+          </div>` : ''}
+        ${p.note ? `<p class="pay-card__note">${App.escapeHtml(p.note)}</p>` : ''}
+        ${p.qr_url ? `<a class="pay-card__qr" href="${App.escapeHtml(p.qr_url)}" target="_blank" rel="noopener">View QR →</a>` : ''}
+      </div>`;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — DNS records manager (verified domains only)               */
+  /* ---------------------------------------------------------------- */
+  const DNS_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS'];
+
+  function dnsTypePill(type, status) {
+    const cls = status === 'live' ? 'badge--verified'
+              : status === 'error' ? 'badge--danger'
+              : 'badge';
+    return `<span class="badge ${cls}">${App.escapeHtml(type)}${status && status !== 'live' ? ' · ' + App.escapeHtml(status) : ''}</span>`;
+  }
+
+  async function loadDnsRecords(claimId) {
+    const host = manageBody && manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton" style="height:80px;"></div>';
+    try {
+      const r = await App.api('/tenant/' + claimId + '/dns');
+      const items = r.items || [];
+      const cfHint = r.cf_configured
+        ? '<span class="text-muted">Records publish to Cloudflare automatically.</span>'
+        : '<span class="text-muted">Cloudflare is not configured — records save locally only; an admin must publish them upstream.</span>';
+      host.innerHTML = `
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <p class="text-muted" style="margin:0;">Manage DNS records for <code>${App.escapeHtml(r.subdomain)}</code>. ${cfHint}</p>
+          <button class="btn btn--sm btn--primary" data-dns-add="${claimId}" type="button">+ Add record</button>
+        </div>
+        ${items.length ? `
+          <div class="dash-table-wrap">
+            <table class="dash-table dns-table">
+              <thead><tr>
+                <th>Type</th><th>Name</th><th>Content</th><th>TTL</th><th>Proxied</th><th class="text-right">Action</th>
+              </tr></thead>
+              <tbody>${items.map((d) => dnsRow(d, claimId, r.subdomain)).join('')}</tbody>
+            </table>
+          </div>` : `
+          <div class="dash-empty"><p>No DNS records yet — add one to start pointing this subdomain at your hosting.</p></div>`}
+      `;
+      wireDnsActions(claimId, r.subdomain, items);
+    } catch (e) {
+      host.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Could not load DNS records') + '</p>';
+    }
+  }
+  function dnsRow(d, claimId, subdomain) {
+    const fqdn = (d.name === '@' || d.name === '' || d.name === subdomain) ? subdomain : (d.name + '.' + subdomain);
+    return `
+      <tr data-dns-row="${d.id}">
+        <td>${dnsTypePill(d.type, d.cf_status || '')}</td>
+        <td><code>${App.escapeHtml(fqdn)}</code></td>
+        <td><code style="word-break:break-all;">${App.escapeHtml(d.content)}</code>${d.priority !== null && d.priority !== undefined ? ' <span class="text-muted">(prio ' + d.priority + ')</span>' : ''}</td>
+        <td>${d.ttl === 1 ? 'Auto' : App.escapeHtml(String(d.ttl))}</td>
+        <td>${d.proxied ? '☁︎' : '<span class="text-muted">—</span>'}</td>
+        <td class="text-right">
+          <button class="btn btn--sm" data-dns-edit="${d.id}" type="button">Edit</button>
+          <button class="btn btn--ghost btn--sm btn--danger-text" data-dns-del="${d.id}" type="button">Delete</button>
+        </td>
+      </tr>`;
+  }
+  function wireDnsActions(claimId, subdomain, items) {
+    const root = manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!root) return;
+    root.querySelectorAll('[data-dns-add]').forEach((b) => {
+      b.addEventListener('click', () => openDnsForm(claimId, subdomain, null));
+    });
+    root.querySelectorAll('[data-dns-edit]').forEach((b) => {
+      const id = parseInt(b.getAttribute('data-dns-edit'), 10);
+      const rec = items.find((x) => x.id === id);
+      b.addEventListener('click', () => rec && openDnsForm(claimId, subdomain, rec));
+    });
+    root.querySelectorAll('[data-dns-del]').forEach((b) => {
+      const id = parseInt(b.getAttribute('data-dns-del'), 10);
+      b.addEventListener('click', async () => {
+        if (!confirm('Delete this DNS record? This cannot be undone.')) return;
+        try {
+          await App.api('/tenant/' + claimId + '/dns/' + id, { method: 'DELETE' });
+          App.toast('Record deleted', 'success');
+          loadDnsRecords(claimId);
+        } catch (e) {
+          App.toast((e && e.detail) || 'Delete failed', 'error');
+        }
+      });
+    });
+  }
+  function openDnsForm(claimId, subdomain, rec) {
+    const host = manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!host) return;
+    const isEdit = !!rec;
+    const safe = (v) => App.escapeHtml(v == null ? '' : String(v));
+    host.innerHTML = `
+      <article class="card dns-form">
+        <header class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <h4 style="margin:0;">${isEdit ? 'Edit DNS record' : 'Add DNS record'}</h4>
+          <button class="btn btn--ghost btn--sm" type="button" data-dns-cancel>Cancel</button>
+        </header>
+        <form data-dns-save="${claimId}" class="form-grid mt-2">
+          <div class="field"><label class="label">Type</label>
+            <select name="type" required>
+              ${DNS_TYPES.map((t) => `<option value="${t}" ${rec && rec.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label class="label">Name</label>
+            <input name="name" value="${safe(rec ? rec.name : '@')}" placeholder="@ for apex, or e.g. www, mail" required maxlength="120" />
+            <p class="hint">Use <code>@</code> for the apex (<code>${safe(subdomain)}</code>). Other labels are prepended.</p>
+          </div>
+          <div class="field field--wide"><label class="label">Content / Value</label>
+            <input name="content" value="${safe(rec ? rec.content : '')}" placeholder="e.g. 203.0.113.10  or  hostname.example.com" required maxlength="512" />
+          </div>
+          <div class="field"><label class="label">TTL (seconds)</label>
+            <input name="ttl" type="number" min="0" value="${safe(rec ? rec.ttl : 1)}" />
+            <p class="hint">1 = automatic / Cloudflare-default.</p>
+          </div>
+          <div class="field" data-dns-mx ${rec && rec.type === 'MX' ? '' : 'hidden'}>
+            <label class="label">Priority (MX only)</label>
+            <input name="priority" type="number" min="0" max="65535" value="${safe(rec && rec.priority != null ? rec.priority : 10)}" />
+          </div>
+          <div class="field field--wide" data-dns-proxy ${rec && ['A','AAAA','CNAME'].includes(rec.type) ? '' : 'hidden'}>
+            <label class="toggle-row">
+              <input type="checkbox" name="proxied" ${rec && rec.proxied ? 'checked' : ''} />
+              <span><strong>Proxy through Cloudflare (orange cloud)</strong><span class="text-muted"> — Cloudflare's automatic SSL and cache.</span></span>
+            </label>
+          </div>
+          <div class="field field--wide text-right">
+            <button class="btn btn--primary" type="submit">${isEdit ? 'Save changes' : 'Create record'}</button>
+          </div>
+        </form>
+      </article>`;
+    const form    = host.querySelector('[data-dns-save]');
+    const typeSel = form.querySelector('[name=type]');
+    const mxField = form.querySelector('[data-dns-mx]');
+    const proxyF  = form.querySelector('[data-dns-proxy]');
+    typeSel.addEventListener('change', () => {
+      const t = typeSel.value;
+      mxField.hidden = (t !== 'MX');
+      proxyF.hidden  = !['A', 'AAAA', 'CNAME'].includes(t);
+    });
+    host.querySelector('[data-dns-cancel]').addEventListener('click', () => loadDnsRecords(claimId));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        type:     (fd.get('type') || 'A').toString(),
+        name:     (fd.get('name') || '@').toString().trim() || '@',
+        content:  (fd.get('content') || '').toString().trim(),
+        ttl:      parseInt(fd.get('ttl') || '1', 10),
+        priority: fd.get('priority') ? parseInt(fd.get('priority'), 10) : null,
+        proxied:  !!fd.get('proxied'),
+      };
+      try {
+        if (isEdit) {
+          await App.api('/tenant/' + claimId + '/dns/' + rec.id, { method: 'PATCH', body: payload });
+          App.toast('Record updated', 'success');
+        } else {
+          await App.api('/tenant/' + claimId + '/dns', { method: 'POST', body: payload });
+          App.toast('Record created', 'success');
+        }
+        loadDnsRecords(claimId);
+      } catch (err) {
+        if (err && err.errors) {
+          const first = Object.keys(err.errors)[0];
+          App.toast(err.errors[first], 'error');
+        } else {
+          App.toast((err && err.detail) || 'Save failed', 'error');
+        }
       }
     });
   }

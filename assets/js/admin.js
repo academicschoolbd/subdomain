@@ -77,6 +77,7 @@
     if (name === 'audit')        loadAudit();
     if (name === 'settings')     loadSettings();
     if (name === 'integrations') loadIntegrations();
+    if (name === 'payments')     loadAdminPayments();
   }
 
   function wirePaneSwitcher() {
@@ -847,6 +848,7 @@
               ${fld('site.url', 'Public site URL', { placeholder: 'https://institution.bd', help: 'Used to build OAuth redirect URIs and absolute links. No trailing slash.' })}
               ${fld('brand.name', 'Brand name', { placeholder: 'institution.bd' })}
               ${fld('brand.tagline', 'Brand tagline', { placeholder: 'Free verified subdomains for Bangladeshi institutions', wide: true })}
+              ${fld('nameservers', 'Nameservers (comma- or space-separated)', { placeholder: 'amir.ns.cloudflare.com, tia.ns.cloudflare.com', help: 'Shown on every owner\'s "Nameservers" tab. Leave blank to use the Cloudflare placeholder.', wide: true })}
             </div>
           </details>
 
@@ -886,6 +888,34 @@
               ${fld('whatsapp.community_url', 'Community invite URL', { placeholder: 'https://chat.whatsapp.com/…', wide: true })}
               ${fld('whatsapp.community_title', 'Community card title', { placeholder: 'Join our WhatsApp community' })}
               ${fld('whatsapp.community_subtitle', 'Community card subtitle', { placeholder: 'Get announcements, support and meet other admins.' })}
+            </div>
+          </details>
+
+          <details class="card" style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">Outbound email (password reset)</summary>
+            <p class="text-muted mt-2" style="margin-top:8px;">Pick "SMTP" to use Gmail, SendGrid, Mailgun, SES or your cPanel mailbox. Pick "PHP mail()" to use the server's local sendmail (zero config, weaker deliverability).</p>
+            <div class="form-grid mt-3">
+              <div class="field">
+                <label class="label">Transport</label>
+                <select name="mail.transport">
+                  <option value="mail" ${val('mail.transport') === 'mail' || val('mail.transport') === '' ? 'selected' : ''}>PHP mail() — local sendmail</option>
+                  <option value="smtp" ${val('mail.transport') === 'smtp' ? 'selected' : ''}>SMTP (recommended)</option>
+                </select>
+              </div>
+              ${fld('mail.from_email', 'From address',  { placeholder: 'no-reply@institution.bd' })}
+              ${fld('mail.from_name',  'From name',     { placeholder: 'institution.bd' })}
+              ${fld('mail.smtp_host',  'SMTP host',     { placeholder: 'smtp.gmail.com' })}
+              ${fld('mail.smtp_port',  'SMTP port',     { placeholder: '587' })}
+              <div class="field">
+                <label class="label">Encryption</label>
+                <select name="mail.smtp_secure">
+                  <option value="tls" ${val('mail.smtp_secure') === 'tls' || val('mail.smtp_secure') === '' ? 'selected' : ''}>STARTTLS (587)</option>
+                  <option value="ssl" ${val('mail.smtp_secure') === 'ssl' ? 'selected' : ''}>Implicit TLS (465)</option>
+                  <option value=""    ${val('mail.smtp_secure') === 'none' ? 'selected' : ''}>None (port 25, not recommended)</option>
+                </select>
+              </div>
+              ${fld('mail.smtp_user',  'SMTP username', { placeholder: 'apikey or full email' })}
+              ${fld('mail.smtp_pass',  'SMTP password / API key', { placeholder: 'paste secret' })}
             </div>
           </details>
 
@@ -1022,6 +1052,189 @@
       } finally {
         submit.disabled = false;
         submit.textContent = orig;
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Admin "Support payments" CRUD                             */
+  /* ---------------------------------------------------------------- */
+  const ADMIN_PAY_METHODS = [
+    { id: 'bkash',  label: 'bKash' },
+    { id: 'nagad',  label: 'Nagad' },
+    { id: 'rocket', label: 'Rocket' },
+    { id: 'upay',   label: 'Upay' },
+    { id: 'tap',    label: 'Tap' },
+    { id: 'bank',   label: 'Bank transfer' },
+    { id: 'card',   label: 'Card' },
+    { id: 'paypal', label: 'PayPal' },
+    { id: 'crypto', label: 'Crypto' },
+    { id: 'other',  label: 'Other' },
+  ];
+
+  function loadAdminPayments() {
+    const host = document.querySelector('[data-payments-admin-host]');
+    if (!host) return;
+    host.innerHTML = '<div class="card mt-3"><div class="skeleton" style="height:120px;"></div></div>';
+    App.api('/admin/support/payments').then((r) => {
+      renderAdminPayments(host, r.items || []);
+    }).catch((e) => {
+      host.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Load failed') + '</p>';
+    });
+  }
+
+  function renderAdminPayments(host, items) {
+    host.innerHTML = `
+      <div class="card dash-card">
+        <header class="dash-card__head">
+          <div>
+            <h2 class="dash-card__title">Support payments</h2>
+            <p class="dash-card__sub">Manage the payment methods shown on the dashboard's "Support Developer" pane. Hidden rows are saved but not shown to owners.</p>
+          </div>
+          <button class="btn btn--primary btn--sm" type="button" data-pay-add>+ Add method</button>
+        </header>
+        <div class="dash-table-wrap">
+          <table class="dash-table">
+            <thead><tr>
+              <th>Method</th><th>Label</th><th>Number / handle</th><th>Visible</th><th>Order</th><th class="text-right">Action</th>
+            </tr></thead>
+            <tbody data-pay-body>
+              ${items.length ? items.map(adminPayRow).join('') : `
+                <tr><td colspan="6"><div class="dash-empty"><p>No payment methods yet — click "Add method" above.</p></div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+        <div data-pay-form-host style="padding:0 24px 22px;"></div>
+      </div>`;
+    host.querySelector('[data-pay-add]').addEventListener('click', () => openAdminPayForm(null));
+    host.querySelectorAll('[data-pay-edit]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const id = parseInt(b.getAttribute('data-pay-edit'), 10);
+        const it = items.find((x) => x.id === id);
+        if (it) openAdminPayForm(it);
+      });
+    });
+    host.querySelectorAll('[data-pay-toggle]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const id = parseInt(b.getAttribute('data-pay-toggle'), 10);
+        const it = items.find((x) => x.id === id);
+        if (!it) return;
+        try {
+          await App.api('/admin/support/payments/' + id, {
+            method: 'PATCH', body: { visible: !it.visible },
+          });
+          App.toast('Visibility updated', 'success');
+          loadAdminPayments();
+        } catch (e) { App.toast((e && e.detail) || 'Failed', 'error'); }
+      });
+    });
+    host.querySelectorAll('[data-pay-del]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const id = parseInt(b.getAttribute('data-pay-del'), 10);
+        if (!confirm('Permanently delete this payment method?')) return;
+        try {
+          await App.api('/admin/support/payments/' + id, { method: 'DELETE' });
+          App.toast('Deleted', 'success');
+          loadAdminPayments();
+        } catch (e) { App.toast((e && e.detail) || 'Delete failed', 'error'); }
+      });
+    });
+  }
+
+  function adminPayRow(p) {
+    const visBadge = p.visible
+      ? '<span class="badge badge--verified">Visible</span>'
+      : '<span class="badge badge--muted">Hidden</span>';
+    return `
+      <tr>
+        <td><code>${App.escapeHtml(p.method)}</code></td>
+        <td><strong>${App.escapeHtml(p.label)}</strong>${p.note ? '<div class="text-muted" style="font-size:.85rem;">' + App.escapeHtml(p.note) + '</div>' : ''}</td>
+        <td><code>${App.escapeHtml(p.number || '—')}</code></td>
+        <td>${visBadge}</td>
+        <td>${p.sort_order}</td>
+        <td class="text-right">
+          <button class="btn btn--sm" type="button" data-pay-edit="${p.id}">Edit</button>
+          <button class="btn btn--sm" type="button" data-pay-toggle="${p.id}">${p.visible ? 'Hide' : 'Show'}</button>
+          <button class="btn btn--ghost btn--sm btn--danger-text" type="button" data-pay-del="${p.id}">Delete</button>
+        </td>
+      </tr>`;
+  }
+
+  function openAdminPayForm(it) {
+    const host = document.querySelector('[data-pay-form-host]');
+    if (!host) return;
+    const isEdit = !!it;
+    const safe = (v) => App.escapeHtml(v == null ? '' : String(v));
+    const sel = (m) => ADMIN_PAY_METHODS.map((p) =>
+      `<option value="${p.id}" ${m === p.id ? 'selected' : ''}>${App.escapeHtml(p.label)}</option>`
+    ).join('');
+    host.innerHTML = `
+      <article class="card mt-3" style="background:var(--c-bg);">
+        <header class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <h4 style="margin:0;">${isEdit ? 'Edit payment method' : 'Add payment method'}</h4>
+          <button class="btn btn--ghost btn--sm" type="button" data-pay-cancel>Cancel</button>
+        </header>
+        <form data-pay-save="${isEdit ? it.id : ''}" class="form-grid mt-2">
+          <div class="field"><label class="label">Method</label>
+            <select name="method" required>${sel(it ? it.method : 'bkash')}</select>
+          </div>
+          <div class="field"><label class="label">Label *</label>
+            <input name="label" required maxlength="120" value="${safe(it ? it.label : '')}" placeholder="e.g. bKash (Personal)" />
+          </div>
+          <div class="field"><label class="label">Number / handle</label>
+            <input name="number" maxlength="120" value="${safe(it ? it.number : '')}" placeholder="01XXXXXXXXX" />
+          </div>
+          <div class="field"><label class="label">Sort order</label>
+            <input name="sort_order" type="number" value="${safe(it ? it.sort_order : 100)}" />
+          </div>
+          <div class="field field--wide"><label class="label">Note (shown below the number)</label>
+            <textarea name="note" rows="2" maxlength="500">${safe(it ? it.note : '')}</textarea>
+          </div>
+          <div class="field field--wide"><label class="label">QR image URL (optional)</label>
+            <input name="qr_url" type="url" maxlength="512" value="${safe(it ? it.qr_url : '')}" placeholder="https://… or /uploads/…" />
+          </div>
+          <div class="field field--wide">
+            <label class="toggle-row">
+              <input type="checkbox" name="visible" ${(!it || it.visible) ? 'checked' : ''} />
+              <span><strong>Visible to owners</strong><span class="text-muted"> — shown on the dashboard "Support Developer" pane.</span></span>
+            </label>
+          </div>
+          <div class="field field--wide text-right">
+            <button class="btn btn--primary" type="submit">${isEdit ? 'Save changes' : 'Create'}</button>
+          </div>
+        </form>
+      </article>`;
+    host.querySelector('[data-pay-cancel]').addEventListener('click', () => { host.innerHTML = ''; });
+    const form = host.querySelector('[data-pay-save]');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        method:     (fd.get('method') || 'other').toString(),
+        label:      (fd.get('label')  || '').toString().trim(),
+        number:     (fd.get('number') || '').toString().trim(),
+        note:       (fd.get('note')   || '').toString().trim(),
+        qr_url:     (fd.get('qr_url') || '').toString().trim(),
+        sort_order: parseInt(fd.get('sort_order') || '100', 10),
+        visible:    !!fd.get('visible'),
+      };
+      try {
+        if (isEdit) {
+          await App.api('/admin/support/payments/' + it.id, { method: 'PATCH', body: payload });
+          App.toast('Saved', 'success');
+        } else {
+          await App.api('/admin/support/payments', { method: 'POST', body: payload });
+          App.toast('Created', 'success');
+        }
+        host.innerHTML = '';
+        loadAdminPayments();
+      } catch (err) {
+        if (err && err.errors) {
+          const first = Object.keys(err.errors)[0];
+          App.toast(err.errors[first], 'error');
+        } else {
+          App.toast((err && err.detail) || 'Save failed', 'error');
+        }
       }
     });
   }

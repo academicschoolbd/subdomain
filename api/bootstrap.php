@@ -21,6 +21,7 @@ require_once $root . '/lib/auth.php';
 require_once $root . '/lib/slug.php';
 require_once $root . '/lib/cloudflare.php';
 require_once $root . '/lib/integrations.php';
+require_once $root . '/lib/mail.php';
 
 date_default_timezone_set('Asia/Dhaka');
 error_reporting(E_ALL);
@@ -30,6 +31,7 @@ ini_set('log_errors', '1');
 // Bootstrap schema + seed on first run.
 db_init_schema($CONFIG);
 db_seed_if_empty($CONFIG);
+db_seed_support_payments_if_empty($CONFIG);
 
 // v3.1 — overlay any admin-edited integration values on top of config.php so
 // the rest of the request reads the merged settings transparently.

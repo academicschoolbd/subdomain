@@ -60,6 +60,15 @@ $routes = [
     ['POST',   '#^tenant/(?P<id>\d+)/notices$#',                             'route_tenant_notice_create'],
     ['DELETE', '#^tenant/(?P<id>\d+)/notices/(?P<nid>\d+)$#',                'route_tenant_notice_delete'],
 
+    // v3.2 — owner-managed DNS records.
+    ['GET',    '#^tenant/(?P<id>\d+)/dns$#',                                 'route_tenant_dns_list'],
+    ['POST',   '#^tenant/(?P<id>\d+)/dns$#',                                 'route_tenant_dns_create'],
+    ['PATCH',  '#^tenant/(?P<id>\d+)/dns/(?P<rid>\d+)$#',                    'route_tenant_dns_update'],
+    ['DELETE', '#^tenant/(?P<id>\d+)/dns/(?P<rid>\d+)$#',                    'route_tenant_dns_delete'],
+
+    // v3.2 — public payment methods (visible-only) for "Support Developer" pane.
+    ['GET',    '#^support/payments$#',                                       'route_public_support_payments'],
+
     ['GET',    '#^admin/stats$#',                                            'route_admin_stats'],
     ['GET',    '#^admin/claims$#',                                           'route_admin_list_claims'],
     ['GET',    '#^admin/claims/(?P<id>\d+)$#',                               'route_admin_get_claim'],
@@ -83,6 +92,12 @@ $routes = [
     ['GET',    '#^admin/users$#',                                            'route_admin_users_list'],
     ['POST',   '#^admin/users/(?P<id>\d+)/role$#',                           'route_admin_users_set_role'],
     ['POST',   '#^admin/queue/bulk-decide$#',                                'route_admin_bulk_decide'],
+
+    // v3.2 — admin-managed payment methods.
+    ['GET',    '#^admin/support/payments$#',                                 'route_admin_support_payments_list'],
+    ['POST',   '#^admin/support/payments$#',                                 'route_admin_support_payments_create'],
+    ['PATCH',  '#^admin/support/payments/(?P<id>\d+)$#',                     'route_admin_support_payments_update'],
+    ['DELETE', '#^admin/support/payments/(?P<id>\d+)$#',                     'route_admin_support_payments_delete'],
 
     ['GET',    '#^sitemap\.xml$#',                                           'route_public_sitemap'],
 ];
@@ -110,7 +125,7 @@ if (!$matched) {
 
 // Build positional args in a stable order.
 $callArgs = [$CONFIG];
-$nameOrder = ['provider','brand','slug','id','nid'];
+$nameOrder = ['provider','brand','slug','id','nid','rid'];
 foreach ($nameOrder as $key) {
     if (array_key_exists($key, $args)) {
         $callArgs[] = ctype_digit($args[$key]) ? (int)$args[$key] : $args[$key];

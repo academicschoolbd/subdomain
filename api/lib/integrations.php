@@ -29,6 +29,7 @@ function integrations_known_keys(): array
         'site.url',
         'brand.name',
         'brand.tagline',
+        'nameservers',
 
         // OAuth
         'oauth.google.client_id',
@@ -53,6 +54,16 @@ function integrations_known_keys(): array
         'whatsapp.community_title',
         'whatsapp.community_subtitle',
 
+        // v3.2 — Outbound email (SMTP)
+        'mail.transport',     // 'smtp' | 'mail'
+        'mail.from_email',
+        'mail.from_name',
+        'mail.smtp_host',
+        'mail.smtp_port',
+        'mail.smtp_user',
+        'mail.smtp_pass',
+        'mail.smtp_secure',   // '' | 'tls' | 'ssl'
+
         // Auth / security
         'jwt.secret',
     ];
@@ -66,6 +77,7 @@ function integrations_sensitive_keys(): array
         'oauth.facebook.client_secret',
         'oauth.github.client_secret',
         'cloudflare.api_token',
+        'mail.smtp_pass',
         'jwt.secret',
     ];
 }
@@ -157,6 +169,7 @@ function integrations_apply_overlay(array &$CONFIG): void
             case 'site.url':       $set('site_url', $val); break;
             case 'brand.name':     $set('brand_name', $val); break;
             case 'brand.tagline':  $set('brand_tagline', $val); break;
+            case 'nameservers':    $set('nameservers', $val); break;
 
             // -- OAuth providers --
             case 'oauth.google.client_id':       $set('oauth.google.client_id', $val); break;
@@ -191,6 +204,16 @@ function integrations_apply_overlay(array &$CONFIG): void
             case 'whatsapp.community_url':             $set('whatsapp.community_url', $val); break;
             case 'whatsapp.community_title':           $set('whatsapp.community_title', $val); break;
             case 'whatsapp.community_subtitle':        $set('whatsapp.community_subtitle', $val); break;
+
+            // -- v3.2 — Outbound mail --
+            case 'mail.transport':   $set('mail.transport',   $val); break;
+            case 'mail.from_email':  $set('mail.from_email',  $val); break;
+            case 'mail.from_name':   $set('mail.from_name',   $val); break;
+            case 'mail.smtp_host':   $set('mail.smtp_host',   $val); break;
+            case 'mail.smtp_port':   $set('mail.smtp_port',   $val); break;
+            case 'mail.smtp_user':   $set('mail.smtp_user',   $val); break;
+            case 'mail.smtp_pass':   $set('mail.smtp_pass',   $val); break;
+            case 'mail.smtp_secure': $set('mail.smtp_secure', $val); break;
 
             // -- Auth / security --
             case 'jwt.secret':
@@ -262,6 +285,7 @@ function integrations_config_lookup(array $CONFIG, string $key)
         'site.url'                              => ['site_url'],
         'brand.name'                            => ['brand_name'],
         'brand.tagline'                         => ['brand_tagline'],
+        'nameservers'                           => ['nameservers'],
         'oauth.google.client_id'                => ['oauth','google','client_id'],
         'oauth.google.client_secret'            => ['oauth','google','client_secret'],
         'oauth.facebook.client_id'              => ['oauth','facebook','client_id'],
@@ -279,6 +303,14 @@ function integrations_config_lookup(array $CONFIG, string $key)
         'whatsapp.community_url'                => ['whatsapp','community_url'],
         'whatsapp.community_title'              => ['whatsapp','community_title'],
         'whatsapp.community_subtitle'           => ['whatsapp','community_subtitle'],
+        'mail.transport'                        => ['mail','transport'],
+        'mail.from_email'                       => ['mail','from_email'],
+        'mail.from_name'                        => ['mail','from_name'],
+        'mail.smtp_host'                        => ['mail','smtp_host'],
+        'mail.smtp_port'                        => ['mail','smtp_port'],
+        'mail.smtp_user'                        => ['mail','smtp_user'],
+        'mail.smtp_pass'                        => ['mail','smtp_pass'],
+        'mail.smtp_secure'                      => ['mail','smtp_secure'],
         'jwt.secret'                            => ['jwt_secret'],
     ];
     if (!isset($map[$key])) return '';

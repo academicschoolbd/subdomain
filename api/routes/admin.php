@@ -665,3 +665,146 @@ function route_admin_bulk_decide(array $CONFIG): void
     }
     send_json(['ok' => true, 'count' => count($results), 'results' => $results]);
 }
+
+
+/* =================================================================== */
+/*  v3.2 — admin-managed "Support Developer" payment methods             */
+/* =================================================================== */
+
+const ADMIN_PAY_METHODS = [
+    'bkash', 'nagad', 'rocket', 'upay', 'tap',
+    'bank', 'card', 'paypal', 'crypto', 'other',
+];
+
+function _admin_pay_row(array $r): array
+{
+    return [
+        'id'         => (int)$r['id'],
+        'method'     => (string)$r['method'],
+        'label'      => (string)$r['label'],
+        'number'     => $r['number'] !== null ? (string)$r['number'] : null,
+        'note'       => $r['note']   !== null ? (string)$r['note']   : null,
+        'qr_url'     => $r['qr_url'] !== null ? (string)$r['qr_url'] : null,
+        'sort_order' => (int)($r['sort_order'] ?? 0),
+        'visible'    => (bool)($r['visible'] ?? 0),
+        'created_at' => $r['created_at'] ?? null,
+        'updated_at' => $r['updated_at'] ?? null,
+    ];
+}
+
+function _admin_pay_validate(array $data): array
+{
+    $errors = [];
+    $method = strtolower(trim((string)($data['method'] ?? 'other')));
+    if (!in_array($method, ADMIN_PAY_METHODS, true)) {
+        $errors['method'] = 'Method must be one of: ' . implode(', ', ADMIN_PAY_METHODS);
+    }
+    $label = trim((string)($data['label'] ?? ''));
+    if ($label === '') $errors['label'] = 'Label is required.';
+    if (strlen($label) > 120) $errors['label'] = 'Label is too long (max 120).';
+    $number = trim((string)($data['number'] ?? ''));
+    if (strlen($number) > 120) $errors['number'] = 'Number is too long (max 120).';
+    $note = trim((string)($data['note'] ?? ''));
+    $qr = trim((string)($data['qr_url'] ?? ''));
+    if (strlen($qr) > 512) $errors['qr_url'] = 'QR URL is too long (max 512).';
+    if ($qr !== '' && !preg_match('#^https?://#i', $qr) && substr($qr, 0, 1) !== '/') {
+        $errors['qr_url'] = 'QR URL must be an http(s) link or /uploads path.';
+    }
+    $sort = (int)($data['sort_order'] ?? 0);
+    $visible = !empty($data['visible']) ? 1 : 0;
+    return [$errors, [
+        'method' => $method, 'label' => $label,
+        'number' => $number !== '' ? $number : null,
+        'note'   => $note   !== '' ? $note   : null,
+        'qr_url' => $qr     !== '' ? $qr     : null,
+        'sort_order' => $sort,
+        'visible'    => $visible,
+    ]];
+}
+
+/** GET /api/admin/support/payments — every payment method (visible or not). */
+function route_admin_support_payments_list(array $CONFIG): void
+{
+    require_admin($CONFIG);
+    $stmt = db($CONFIG)->query(
+        'SELECT * FROM support_payments ORDER BY sort_order ASC, id ASC'
+    );
+    $items = array_map('_admin_pay_row', $stmt->fetchAll());
+    send_json(['items' => $items]);
+}
+
+/** POST /api/admin/support/payments — create. */
+function route_admin_support_payments_create(array $CONFIG): void
+{
+    $admin = require_admin($CONFIG);
+    $data = read_json_body();
+    [$errors, $clean] = _admin_pay_validate($data);
+    if ($errors) send_json(['detail' => 'Invalid input', 'errors' => $errors], 422);
+    $now = db_now($CONFIG);
+    $pdo = db($CONFIG);
+    $pdo->prepare(
+        'INSERT INTO support_payments
+            (method, label, number, note, qr_url, sort_order, visible, created_at, updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?)'
+    )->execute([
+        $clean['method'], $clean['label'], $clean['number'], $clean['note'], $clean['qr_url'],
+        $clean['sort_order'], $clean['visible'], $now, $now,
+    ]);
+    $id = (int)$pdo->lastInsertId();
+    audit($CONFIG, (int)$admin['id'], null, 'admin.support_payment.create',
+        json_encode(['id' => $id, 'method' => $clean['method'], 'label' => $clean['label']]));
+    $stmt = $pdo->prepare('SELECT * FROM support_payments WHERE id = ?');
+    $stmt->execute([$id]);
+    send_json(['ok' => true, 'item' => _admin_pay_row($stmt->fetch())]);
+}
+
+/** PATCH /api/admin/support/payments/{id} — partial update. */
+function route_admin_support_payments_update(array $CONFIG, int $id): void
+{
+    $admin = require_admin($CONFIG);
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT * FROM support_payments WHERE id = ?');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) send_error('Payment method not found', 404);
+
+    $data = read_json_body();
+    $merged = [
+        'method'     => $data['method']     ?? $row['method'],
+        'label'      => $data['label']      ?? $row['label'],
+        'number'     => array_key_exists('number', $data) ? $data['number'] : $row['number'],
+        'note'       => array_key_exists('note',   $data) ? $data['note']   : $row['note'],
+        'qr_url'     => array_key_exists('qr_url', $data) ? $data['qr_url'] : $row['qr_url'],
+        'sort_order' => $data['sort_order'] ?? $row['sort_order'],
+        'visible'    => array_key_exists('visible', $data) ? $data['visible'] : $row['visible'],
+    ];
+    [$errors, $clean] = _admin_pay_validate($merged);
+    if ($errors) send_json(['detail' => 'Invalid input', 'errors' => $errors], 422);
+
+    $now = db_now($CONFIG);
+    $pdo->prepare(
+        'UPDATE support_payments SET method = ?, label = ?, number = ?, note = ?,
+            qr_url = ?, sort_order = ?, visible = ?, updated_at = ? WHERE id = ?'
+    )->execute([
+        $clean['method'], $clean['label'], $clean['number'], $clean['note'], $clean['qr_url'],
+        $clean['sort_order'], $clean['visible'], $now, $id,
+    ]);
+    audit($CONFIG, (int)$admin['id'], null, 'admin.support_payment.update',
+        json_encode(['id' => $id]));
+    $stmt = $pdo->prepare('SELECT * FROM support_payments WHERE id = ?');
+    $stmt->execute([$id]);
+    send_json(['ok' => true, 'item' => _admin_pay_row($stmt->fetch())]);
+}
+
+/** DELETE /api/admin/support/payments/{id} — hard delete. */
+function route_admin_support_payments_delete(array $CONFIG, int $id): void
+{
+    $admin = require_admin($CONFIG);
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT id FROM support_payments WHERE id = ?');
+    $stmt->execute([$id]);
+    if (!$stmt->fetch()) send_error('Payment method not found', 404);
+    $pdo->prepare('DELETE FROM support_payments WHERE id = ?')->execute([$id]);
+    audit($CONFIG, (int)$admin['id'], null, 'admin.support_payment.delete', (string)$id);
+    send_json(['ok' => true]);
+}

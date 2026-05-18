@@ -123,6 +123,12 @@
             </span>
             <span>Integrations</span>
           </button>
+          <button class="dash-nav__item" data-pane-btn="payments" type="button">
+            <span class="dash-nav__ico" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><line x1="2" y1="11" x2="22" y2="11"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
+            </span>
+            <span>Support payments</span>
+          </button>
         </nav>
 
         <footer class="dash-sidebar__foot">
@@ -390,6 +396,11 @@
         <!-- =================== INTEGRATIONS PANE =================== -->
         <section class="dash-pane" data-pane="integrations" hidden>
           <div data-integrations-host></div>
+        </section>
+
+        <!-- =================== PAYMENTS PANE =================== -->
+        <section class="dash-pane" data-pane="payments" hidden>
+          <div data-payments-admin-host></div>
         </section>
 
       </main>
