@@ -80,6 +80,10 @@ $routes = [
     ['POST',   '#^admin/integrations/test$#',                                'route_admin_integrations_test'],
     ['POST',   '#^admin/integrations/rotate-jwt$#',                          'route_admin_integrations_rotate_jwt'],
 
+    ['GET',    '#^admin/users$#',                                            'route_admin_users_list'],
+    ['POST',   '#^admin/users/(?P<id>\d+)/role$#',                           'route_admin_users_set_role'],
+    ['POST',   '#^admin/queue/bulk-decide$#',                                'route_admin_bulk_decide'],
+
     ['GET',    '#^sitemap\.xml$#',                                           'route_public_sitemap'],
 ];
 

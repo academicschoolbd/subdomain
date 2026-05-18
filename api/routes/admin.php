@@ -15,7 +15,38 @@ function route_admin_stats(array $CONFIG): void
     }
     $users = (int)$pdo->query('SELECT COUNT(*) c FROM users')->fetch()['c'];
     $admins = (int)$pdo->query('SELECT COUNT(*) c FROM users WHERE is_admin = 1')->fetch()['c'];
-    send_json(['counts' => $counts, 'users' => $users, 'admins' => $admins]);
+
+    // v3.2 — recent activity feed for the new Overview pane (last 12 entries).
+    $stmt = $pdo->query(
+        "SELECT a.id, a.actor_user_id, a.institution_id, a.action, a.detail, a.created_at,
+                u.name AS actor_name, u.email AS actor_email
+           FROM audit_log a
+      LEFT JOIN users u ON u.id = a.actor_user_id
+       ORDER BY a.id DESC
+          LIMIT 12"
+    );
+    $activity = array_map(static function ($r) {
+        $r['id']             = (int)$r['id'];
+        $r['actor_user_id']  = $r['actor_user_id'] !== null ? (int)$r['actor_user_id'] : null;
+        $r['institution_id'] = $r['institution_id'] !== null ? (int)$r['institution_id'] : null;
+        return $r;
+    }, $stmt->fetchAll());
+
+    // Useful denormalised numbers for the KPI strip.
+    if (db_is_mysql($CONFIG)) {
+        $todayQ = $pdo->query("SELECT COUNT(*) c FROM institutions WHERE status='verified' AND verified_at >= (NOW() - INTERVAL 1 DAY)");
+    } else {
+        $todayQ = $pdo->query("SELECT COUNT(*) c FROM institutions WHERE status='verified' AND verified_at >= datetime('now','-1 day')");
+    }
+    $verifiedToday = (int)($todayQ ? $todayQ->fetch()['c'] : 0);
+
+    send_json([
+        'counts' => $counts,
+        'users' => $users,
+        'admins' => $admins,
+        'verified_today' => $verifiedToday,
+        'recent_activity' => $activity,
+    ]);
 }
 
 function route_admin_list_claims(array $CONFIG): void
@@ -461,4 +492,176 @@ function route_admin_integrations_rotate_jwt(array $CONFIG): void
         'message' => 'JWT secret rotated. All sessions (including yours) have been invalidated — please sign in again.',
         'masked'  => integrations_mask($secret),
     ]);
+}
+
+
+
+/* =================================================================== */
+/*  v3.2 — admin user management                                         */
+/* =================================================================== */
+
+/** GET /api/admin/users  — list users with optional q + role filter.
+ *
+ *  Query: ?q=<email/name/mobile>&role=admin|user|any&limit=…&offset=…
+ *  Response: { items: [...], total: int }
+ *
+ *  Each item carries the fields the new admin UI needs: id, email, name,
+ *  mobile, provider, is_admin, profile_complete (computed from the same
+ *  required-field list as auth_me), claim_count, created_at.
+ */
+function route_admin_users_list(array $CONFIG): void
+{
+    require_admin($CONFIG);
+    $q     = trim((string)($_GET['q'] ?? ''));
+    $role  = strtolower(trim((string)($_GET['role'] ?? 'any')));
+    $limit = max(1, min(200, (int)($_GET['limit']  ?? 50)));
+    $offset= max(0, (int)($_GET['offset'] ?? 0));
+
+    $cols = _user_select_cols($CONFIG); // shared column list (see auth.php)
+    $where = [];
+    $bind  = [];
+    if ($q !== '') {
+        $where[] = '(email LIKE ? OR name LIKE ? OR mobile LIKE ? OR phone LIKE ?)';
+        $like = '%' . $q . '%';
+        array_push($bind, $like, $like, $like, $like);
+    }
+    if ($role === 'admin')      { $where[] = 'is_admin = 1'; }
+    elseif ($role === 'user')   { $where[] = 'is_admin = 0'; }
+
+    $sql = "SELECT $cols FROM users";
+    if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
+    $sql .= ' ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset;
+
+    $stmt = db($CONFIG)->prepare($sql);
+    $stmt->execute($bind);
+    $rows = $stmt->fetchAll();
+
+    // Per-user claim count (single round-trip via IN clause).
+    $byUserClaims = [];
+    if ($rows) {
+        $ids = array_column($rows, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $cs = db($CONFIG)->prepare(
+            "SELECT owner_user_id, COUNT(*) c
+               FROM institutions
+              WHERE owner_user_id IN ($placeholders)
+              GROUP BY owner_user_id"
+        );
+        $cs->execute($ids);
+        foreach ($cs->fetchAll() as $r) {
+            $byUserClaims[(int)$r['owner_user_id']] = (int)$r['c'];
+        }
+    }
+
+    $items = array_map(static function ($u) use ($byUserClaims) {
+        $u['id']               = (int)$u['id'];
+        $u['is_admin']         = (bool)($u['is_admin'] ?? 0);
+        $u['profile_complete'] = profile_is_complete($u);
+        $u['claim_count']      = $byUserClaims[(int)$u['id']] ?? 0;
+        // Don't leak password hashes etc. – we only selected safe cols above.
+        return $u;
+    }, $rows);
+
+    $countSql = 'SELECT COUNT(*) c FROM users';
+    if ($where) $countSql .= ' WHERE ' . implode(' AND ', $where);
+    $cs = db($CONFIG)->prepare($countSql);
+    $cs->execute($bind);
+    $total = (int)$cs->fetch()['c'];
+
+    send_json(['items' => $items, 'total' => $total]);
+}
+
+/** POST /api/admin/users/{id}/role  body: { is_admin: true|false } */
+function route_admin_users_set_role(array $CONFIG, int $userId): void
+{
+    $admin = require_admin($CONFIG);
+    if ((int)$admin['id'] === $userId) {
+        send_error("You can't change your own admin role from this screen.", 400);
+    }
+    $data = read_json_body();
+    if (!array_key_exists('is_admin', $data)) {
+        send_error('is_admin (boolean) is required', 400);
+    }
+    $isAdmin = $data['is_admin'] ? 1 : 0;
+
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT id, email, name, is_admin FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $u = $stmt->fetch();
+    if (!$u) send_error('User not found', 404);
+
+    // Don't allow removing the last admin — that would lock everyone out.
+    if ((int)$u['is_admin'] === 1 && $isAdmin === 0) {
+        $remaining = (int)$pdo->query('SELECT COUNT(*) c FROM users WHERE is_admin = 1')->fetch()['c'];
+        if ($remaining <= 1) {
+            send_error("Refusing to demote the last remaining admin. Promote another user first.", 409);
+        }
+    }
+
+    $pdo->prepare('UPDATE users SET is_admin = ? WHERE id = ?')->execute([$isAdmin, $userId]);
+    audit($CONFIG, (int)$admin['id'], null, 'admin.users.role',
+        json_encode(['user_id' => $userId, 'is_admin' => (bool)$isAdmin]));
+
+    send_json(['ok' => true, 'user_id' => $userId, 'is_admin' => (bool)$isAdmin]);
+}
+
+/** POST /api/admin/queue/bulk-decide  body: { ids: [int...], decision: approve|needs_info|reject|suspend, notes? } */
+function route_admin_bulk_decide(array $CONFIG): void
+{
+    $admin = require_admin($CONFIG);
+    $data  = read_json_body();
+    $ids   = $data['ids'] ?? [];
+    if (!is_array($ids) || !$ids) send_error('ids[] is required', 400);
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    $decision = (string)require_param($data, 'decision');
+    $allowed  = ['approve','reject','needs_info','suspend'];
+    if (!in_array($decision, $allowed, true)) send_error('Invalid decision', 400);
+    $notes = (string)($data['notes'] ?? '');
+
+    $results = [];
+    foreach ($ids as $instId) {
+        // Reuse the single-decide handler's logic by inlining the SQL it
+        // would execute. We don't call the existing function because it
+        // calls send_json() and exits.
+        $pdo = db($CONFIG);
+        $stmt = $pdo->prepare('SELECT * FROM institutions WHERE id = ?');
+        $stmt->execute([$instId]);
+        $inst = $stmt->fetch();
+        if (!$inst) { $results[] = ['id' => $instId, 'ok' => false, 'detail' => 'Not found']; continue; }
+
+        $now = db_now($CONFIG);
+        if ($decision === 'approve') {
+            $cf = cf_create_record($CONFIG, $inst['brand'], $inst['slug']);
+            $cfRecordId = $cf['ok'] ? $cf['record_id'] : ($inst['cf_record_id'] ?? null);
+            $dnsStatus  = $cf['attempted'] ? ($cf['ok'] ? 'live' : 'error') : 'manual';
+            $pdo->prepare(
+                'UPDATE institutions SET status = ?, review_notes = ?, verified_at = ?,
+                  cf_record_id = ?, dns_status = ?, dns_message = ? WHERE id = ?'
+            )->execute(['verified', $notes ?: null, $now, $cfRecordId, $dnsStatus, $cf['message'], $instId]);
+            $results[] = ['id' => $instId, 'ok' => true, 'dns' => $dnsStatus];
+        } elseif ($decision === 'reject') {
+            if (!empty($inst['cf_record_id'])) {
+                cf_delete_record($CONFIG, $inst['brand'], $inst['cf_record_id'], $inst['slug']);
+            }
+            $pdo->prepare(
+                'UPDATE institutions SET status = ?, review_notes = ?, cf_record_id = NULL, dns_status = NULL, dns_message = NULL WHERE id = ?'
+            )->execute(['rejected', $notes ?: null, $instId]);
+            $results[] = ['id' => $instId, 'ok' => true];
+        } elseif ($decision === 'needs_info') {
+            $pdo->prepare(
+                'UPDATE institutions SET status = ?, review_notes = ? WHERE id = ?'
+            )->execute(['needs_info', $notes ?: null, $instId]);
+            $results[] = ['id' => $instId, 'ok' => true];
+        } else { // suspend
+            if (!empty($inst['cf_record_id'])) {
+                cf_delete_record($CONFIG, $inst['brand'], $inst['cf_record_id'], $inst['slug']);
+            }
+            $pdo->prepare(
+                'UPDATE institutions SET status = ?, review_notes = ?, dns_status = ?, cf_record_id = NULL WHERE id = ?'
+            )->execute(['suspended', $notes ?: null, 'suspended', $instId]);
+            $results[] = ['id' => $instId, 'ok' => true];
+        }
+        audit($CONFIG, (int)$admin['id'], $instId, 'admin.bulk_decide.' . $decision, $notes);
+    }
+    send_json(['ok' => true, 'count' => count($results), 'results' => $results]);
 }

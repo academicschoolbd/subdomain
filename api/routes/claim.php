@@ -257,10 +257,14 @@ function route_claim_withdraw(array $CONFIG, int $instId): void
     }
     // Owners can withdraw while:
     //   - not verified yet (pending / needs_info / rejected), or
-    //   - verified via the v3.0 instant-claim flow (no docs ever uploaded).
+    //   - verified via the legacy v3.0 instant-claim flow AND moderation is
+    //     currently OFF (require_documents = 0). When admin moderation is ON
+    //     (the v3.2 default), an approved claim is the admin's call to
+    //     suspend, not the owner's.
     // Admins can always withdraw via this route (suspend is the moderation path).
     $statusOk = in_array($inst['status'], ['pending', 'needs_info', 'rejected'], true);
-    if (!$statusOk && $inst['status'] === 'verified') {
+    if (!$statusOk && $inst['status'] === 'verified'
+        && !settings_get_bool($CONFIG, 'require_documents', false)) {
         $cnt = $pdo->prepare('SELECT COUNT(*) c FROM claim_documents WHERE institution_id = ?');
         $cnt->execute([$instId]);
         $statusOk = ((int)$cnt->fetch()['c']) === 0;  // verified-but-doc-less = self-service eligible
