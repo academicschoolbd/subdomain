@@ -442,16 +442,20 @@ function audit(array $CONFIG, ?int $actorId, ?int $instId, string $action, ?stri
 function settings_defaults(): array
 {
     return [
-        // When false (default): a fresh claim auto-verifies and DNS is created
-        // immediately — no document upload, no admin review. Admin can flip
-        // this on later via /admin if abuse appears.
-        'require_documents'    => '0',
-        // When true (default): the homepage / claim flow shows the
-        // single-button instant-claim experience.
-        'instant_claim'        => '1',
+        // v3.2 — admin moderation is now ON by default. Every fresh claim
+        // lands as `pending` and waits for an admin decision (approve,
+        // needs_info, reject, suspend) before DNS is published. Admins can
+        // still flip this OFF to re-enable the v3.0 instant-claim flow if
+        // they prefer self-service onboarding.
+        'require_documents'    => '1',
+        // Mirrors the above: when require_documents is ON, the homepage /
+        // claim flow no longer pretends the subdomain is "instant". Admins
+        // can flip this on independently if they want to advertise instant
+        // claims even with documents required.
+        'instant_claim'        => '0',
         // Auto-create a Cloudflare DNS record on every claim that's verified
-        // (whether by auto-verify or by admin approval). Falls back to a
-        // manual flag when CF isn't configured. Default ON.
+        // (by admin approval, or by instant-claim if it's re-enabled). Falls
+        // back to a `manual` flag when CF isn't configured. Default ON.
         'cloudflare_auto_dns'  => '1',
     ];
 }
