@@ -1,0 +1,6 @@
+# Serve uploads but never execute them.
+<FilesMatch "\.(php|phtml|phar|cgi|pl|py|sh)$">
+    Require all denied
+</FilesMatch>
+Options -ExecCGI
+AddType text/plain .php .phtml .phar .cgi .pl .py .sh
