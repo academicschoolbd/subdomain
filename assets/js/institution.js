@@ -13,7 +13,12 @@
     host.innerHTML = '<div class="card"><h2>Institution not found</h2><p>Pass <code>?brand=…&slug=…</code> in the URL.</p></div>';
     return;
   }
-  document.title = slug + '.' + brand + ' — institution.bd';
+  // v3.2 — institution.php now SSRs the real <title>. Only override it on
+  // the bare /institution.php?brand=…&slug=… form (where the server tag
+  // still says "Institution — institution.bd").
+  if (/Institution — institution\.bd/i.test(document.title)) {
+    document.title = slug + '.' + brand + ' — institution.bd';
+  }
 
   function render(inst, notices) {
     const place = [inst.upazila, inst.district, inst.division].filter(Boolean).join(', ');
@@ -90,7 +95,14 @@
     App.api('/i/' + encodeURIComponent(brand) + '/' + encodeURIComponent(slug) + '/notices').catch(() => ({ notices: [] })),
   ]).then(([inst, n]) => {
     render(inst.institution, n.notices || []);
-    injectJsonLd(inst.institution);
+    // v3.2 — JSON-LD is now emitted server-side from institution.php so
+    // crawlers see it before any JS runs. We only inject client-side as a
+    // fallback when the SSR copy is missing (e.g. the legacy
+    // /institution.php?brand=&slug= URL hits an error and we still want
+    // search engines to pick something up on render).
+    if (!document.querySelector('script[type="application/ld+json"]')) {
+      injectJsonLd(inst.institution);
+    }
   }).catch((e) => {
     host.innerHTML = `<div class="card">
       <h2>Institution not found</h2>

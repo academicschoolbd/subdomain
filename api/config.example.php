@@ -133,4 +133,27 @@ return [
         'target_value' => '',
         'proxied'      => true,
     ],
+
+    /* ------------------------------------------------------------------ */
+    /*  Outbound email — used for password-reset links (v3.2)             */
+    /* ------------------------------------------------------------------ */
+    //
+    // Two transports:
+    //   'smtp' — recommended; works with Gmail, SendGrid, Mailgun, Amazon SES,
+    //            cPanel mail, etc. Fill in smtp_host + smtp_user + smtp_pass.
+    //   'mail' — uses PHP's built-in mail() (sendmail / postfix on the server).
+    //            Zero config but poor deliverability once you grow.
+    //
+    // Admins can also override every value below from /admin → Integrations
+    // without editing this file.
+    'mail' => [
+        'transport'   => 'mail',                    // 'smtp' or 'mail'
+        'from_email'  => 'no-reply@institution.bd', // header `From:`
+        'from_name'   => 'institution.bd',
+        'smtp_host'   => '',                        // e.g. smtp.gmail.com
+        'smtp_port'   => 587,
+        'smtp_user'   => '',
+        'smtp_pass'   => '',
+        'smtp_secure' => 'tls',                     // '', 'tls' (STARTTLS) or 'ssl'
+    ],
 ];

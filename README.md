@@ -1,52 +1,52 @@
-# Free Subdomain Platform — institution.bd & smartschool.bd  (v3.0)
+# Free Subdomain Platform — institution.bd & smartschool.bd  (v3.2)
 
 A free verified-subdomain platform for every Bangladeshi school, college,
 university, madrasa, polytechnic, training institute and NGO.
 
-> **v3.0 — what's new**
-> - **Bug fix** — admin document download now works (previous build sent the
->   JWT in `?_t=…` but the server only read it from the `Authorization`
->   header). The token query-string is now an accepted fallback for direct
->   browser-link endpoints (admin docs, CSV exports, sitemap when private).
-> - **Forgot password** + **reset password** — single-use, 60-minute tokens.
->   In `demo_mode` the API surfaces the reset URL so admins can complete the
->   flow without an SMTP gateway. Wire your real mail provider for production.
-> - **Brute-force throttle** — max 8 failed email-login attempts per
->   (email | IP) in a sliding 15-minute window. Successful login clears the
->   trail. Backed by a new `login_throttle` table.
-> - **Withdraw a claim** — owners can delete their own pending / needs-info /
->   rejected claims from the dashboard. Verified or seeded entries still
->   require admin (suspend) since they may have a live DNS record.
-> - **Editable profile** — the dashboard now has a top-of-page profile card
->   so users can update name / mobile / designation / division / district /
->   upazila / institution-name *after* the initial gate, plus a
->   change-password section.
-> - **Admin audit log** — new tab listing every action with actor, action,
->   institution, and detail. Filter by action prefix / inst-id / search.
-> - **CSV exports** — `Export claims.csv` and `Export users.csv` from the
->   admin console (UTF-8 BOM so Excel reads Bengali correctly).
-> - **SEO + Sharing** — generated `/sitemap.xml`, served `robots.txt`, and
->   JSON-LD `EducationalOrganization` markup on every institution page.
-> - **PWA + accessibility** — installable web app (manifest), keyboard-only
->   "Skip to main content" link, and a header dark-mode toggle that respects
->   `prefers-color-scheme` by default and persists per user.
->
-> Full changelog: see "What changed since v2" below.
+> **v3.2 — what's new**
+> - **Owner-managed DNS records.** Every verified tenant gets a real DNS
+>   editor in the Manage modal — A / AAAA / CNAME / TXT / MX / NS, with TTL,
+>   priority and Cloudflare-proxy toggle. Records publish to Cloudflare
+>   automatically when configured, or save locally with a `manual` flag
+>   when the upstream API isn't reachable.
+> - **Admin-managed "Support Developer" payments.** New `support_payments`
+>   table (seeded with bKash / Nagad / Rocket). Admin → "Support payments"
+>   pane lets you Add / Edit / Hide / Show / Delete every method, with
+>   QR URL, sort order and a free-form note. Owners see only the visible
+>   ones on the dashboard's Support pane, with one-click Copy on the number.
+> - **Polished homepage search result card.** Green-tick "X.bd is available
+>   — Claim Now" / red-cross with suggestion when taken, plus an "Also
+>   available: X.smartschool.bd" sibling row.
+> - **Live stats with no skeleton flash.** The four homepage tiles
+>   (Users / Domains claimed / Pending / Rejected) are server-rendered on
+>   first paint, then auto-refresh every 30 s with `+N since last refresh`
+>   deltas.
+> - **Trimmed home page.** Removed testimonials, the "trusted by every
+>   division" trust strip, the who-it's-for grid, and the compare-with-
+>   paid-com band. Final flow is hero → live stats → brands → features →
+>   how it works → directory → community → FAQ → CTA.
+> - **Real outbound email (SMTP).** New `api/lib/mail.php` — a
+>   dependency-free SMTP client with `mail()` fallback. Wires into the
+>   forgot-password flow so reset links actually arrive in users' inboxes.
+>   Configured from `/admin → Integrations → Outbound email`.
+> - **Per-tenant SEO.** `/i/<brand>/<slug>` now ships server-side
+>   `<title>`, OpenGraph, Twitter Card and JSON-LD tags so Google, Facebook,
+>   WhatsApp and link-preview bots see the right thing before any JS runs.
+> - **Per-user claim throttle.** Non-admin accounts can submit at most
+>   five new claims per hour (counted via `audit_log`); spam onboarding is
+>   a non-issue.
 
-> **v2.1 additions**:
-> - Realtime homepage tiles: **Users registered · Domains claimed · Pending · Rejected** (auto-refresh every 30 s).
-> - **Profile gate** before claiming — collects Full Name, Mobile, পদবি (designation), প্রতিষ্ঠানের নাম, বিভাগ, জেলা, উপজেলা once per user.
-> - All pages now served as **`.php`** files (`index.php`, `claim.php`, …). Pretty URLs (`/claim`, `/directory`, …) still work via `.htaccess`.
->
-> **v2 highlights:** social sign-in (Google / Facebook / GitHub), floating
-> WhatsApp support button, "Join WhatsApp community" section, fully
-> responsive modern homepage with dynamic AJAX, brand-new vanilla-JS
-> frontend (no build step), all pages served as PHP/HTML with a
+> **v3.0 highlights** — forgot-password + token reset, 8/15-min brute-force
+> throttle, withdraw-claim, editable owner profile + change-password,
+> admin audit log, CSV exports, sitemap.xml, robots.txt, JSON-LD,
+> PWA manifest, dark-mode toggle, skip-to-main link, settings panel.
+
+> **v2 highlights** — social sign-in (Google / Facebook / GitHub),
+> floating WhatsApp button, "Join community" band, vanilla-JS frontend,
 > shared PHP 8 API.
 
 Drops straight into **shared cPanel hosting** — pure PHP 8 + SQLite (or
-MySQL if you prefer) + static HTML/CSS/JS. **No Composer, no Node, no
-build step on the server.**
+MySQL) + static HTML/CSS/JS. **No Composer, no Node, no build step.**
 
 ---
 
@@ -55,39 +55,57 @@ build step on the server.**
 ```
 free-subdomain_platform/
 ├── .htaccess              Apache rewrites: API, uploads, pretty URLs
-├── index.php             Homepage (hero, dynamic stats, directory preview, WA community)
-├── directory.php         AJAX directory with filters
-├── claim.php             3-step claim wizard (subdomain → details → docs)
-├── dashboard.php         Owner dashboard (claims, profile, images, notices, docs, withdraw, change password)
-├── admin.php             Admin console — queue, reserved slugs, audit log, CSV exports
-├── institution.php       Single-tenant public page (with JSON-LD structured data)
-├── reset-password.php    Token-based password reset landing page (v3.0)
-├── sitemap.xml.php       Generated XML sitemap of every verified/seeded tenant (v3.0)
-├── robots.txt            Search-engine policy (v3.0)
-├── manifest.webmanifest  PWA manifest — installable on Android/iOS (v3.0)
-├── auth/
-│   └── callback.php      OAuth landing — decodes token from URL fragment
+├── index.php              Homepage (hero, live stats, polished search card,
+│                          brands, features, how-it-works, directory preview,
+│                          WA community, FAQ, CTA)
+├── directory.php          AJAX directory with filters
+├── claim.php              Claim wizard (subdomain → details → docs)
+├── dashboard.php          Owner dashboard — domains table + manage modal,
+│                          DNS records editor, settings, Support Developer
+├── admin.php              Admin console — overview, queue (bulk decide),
+│                          users, reserved slugs, audit log, exports,
+│                          settings, integrations (incl. SMTP), payments
+├── institution.php        Single-tenant page — server-rendered <title>,
+│                          OG / Twitter / JSON-LD for crawlers
+├── reset-password.php     Token-based password reset landing
+├── sitemap.xml.php        Generated XML sitemap
+├── robots.txt             Search-engine policy
+├── manifest.webmanifest   PWA manifest — installable on Android/iOS
+├── auth/callback.php      OAuth landing — decodes JWT from URL fragment
 ├── assets/
-│   ├── css/style.css      Modern, mobile-first stylesheet — light + dark themes
-│   ├── js/
-│   │   ├── app.js         Shared module (API client, auth modal, OAuth, theme, manifest, skip-link)
-│   │   ├── home.js / directory.js / institution.js / claim.js
-│   │   ├── dashboard.js / admin.js / auth-callback.js
-│   │   └── reset-password.js  (v3.0)
-│   └── img/               Logo, favicon, WhatsApp + Google/FB/GitHub icons
-├── api/                   PHP 8 backend
-│   ├── index.php          Front controller
-│   ├── bootstrap.php      Loads config, init DB, init schema, seed
-│   ├── config.example.php Copy to config.php and edit
-│   ├── .htaccess          Locks down lib/, routes/, config files
-│   ├── data/              SQLite database lives here (auto-created)
-│   ├── lib/               auth, db, slug, cloudflare, http  (OAuth + login throttle helpers)
-│   └── routes/            auth.php, claim.php, admin.php, public.php
-├── uploads/               Writable; logos, banners, docs land here
-├── database/install.sql   OPTIONAL — only for MySQL
-├── router.php             Local dev only: `php -S 127.0.0.1:8080 router.php`
-├── INSTALL.md             Step-by-step cPanel + OAuth setup guide
-└── README.md              This file
+│   ├── css/style.css       Modern, mobile-first, light + dark themes
+│   ├── js/                 Vanilla JS — no bundler
+│   │   ├── app.js          Shared (API client, auth modal, OAuth, theme)
+│   │   ├── home.js
+│   │   ├── directory.js
+│   │   ├── institution.js  Tenant page hydration
+│   │   ├── claim.js        Claim wizard
+│   │   ├── dashboard.js    Owner dashboard + DNS editor + payments pane
+│   │   ├── admin.js        Admin console (every pane)
+│   │   ├── auth-callback.js
+│   │   ├── reset-password.js
+│   │   └── bd-locations.js Division → district → upazila cascade
+│   └── img/                Logo, favicon, WhatsApp / Google / FB / GitHub
+├── api/                    PHP 8 backend
+│   ├── index.php           Front controller
+│   ├── bootstrap.php       Loads config + integrations overlay, init schema
+│   ├── config.example.php  Copy to config.php and edit
+│   ├── .htaccess           Locks down lib/, routes/, config files
+│   ├── data/               SQLite database lives here
+│   ├── lib/
+│   │   ├── auth.php        JWT, OAuth, login throttle, password reset
+│   │   ├── cloudflare.php  Cloudflare DNS — single-record + arbitrary CRUD
+│   │   ├── db.php          PDO + migrations + seeds (incl. v3.2 tables)
+│   │   ├── http.php        send_json / send_error helpers
+│   │   ├── integrations.php  Admin overlay (oauth, cloudflare, mail, jwt)
+│   │   ├── mail.php        v3.2 — SMTP client + mail() fallback
+│   │   └── slug.php
+│   └── routes/             auth.php, claim.php, admin.php, public.php
+├── uploads/                Writable; logos, banners, docs land here
+├── database/install.sql    Optional — only for MySQL
+├── router.php              Local dev only
+├── INSTALL.md              Step-by-step cPanel guide
+└── README.md               This file
 ```
 
 ---
@@ -95,66 +113,71 @@ free-subdomain_platform/
 ## Features
 
 ### Public
-- **One-click "⚡ Claim it now"** — type a name, the homepage button morphs
-  into a pulsing primary action the moment the slug is available; one click
-  jumps straight to the claim wizard.
-- **Instant publish** — by default no documents are required; the claim is
-  auto-verified and Cloudflare creates the DNS record on the spot. Admins
-  can toggle "Require documents" back on at any time from the admin
-  settings page.
-- Modern flat hero with realtime tiles (verified / pending / seeded counts via AJAX).
-- Slug availability checker that updates as you type (debounced, ~250 ms).
-- Directory with AJAX filtering: brand, category, division, search-as-you-type, pagination.
-- Per-institution page at `/i/<brand>/<slug>` (in production: `<slug>.<brand>` via wildcard DNS), including `EducationalOrganization` JSON-LD for rich Google cards.
+- Polished search-result card on the homepage (green tick + Claim Now,
+  or red cross with suggestion + sibling-brand row).
+- Live realtime stats (Users / Domains claimed / Pending / Rejected) —
+  server-seeded on first paint, auto-refresh every 30 s.
+- AJAX directory with filters (brand, category, division, search-as-you-type).
+- Per-institution page at `/i/<brand>/<slug>` (or `<slug>.<brand>` via
+  wildcard DNS) with **server-rendered** title, OpenGraph, Twitter Card
+  and `EducationalOrganization` / `NGO` JSON-LD.
 - Notice board on each verified institution.
-- "Join WhatsApp community" call-to-action band on the homepage and in the footer.
-- Floating WhatsApp support button on every page (pulse animation, bottom-right corner).
-- Generated `/sitemap.xml` and `robots.txt`, plus a PWA manifest so the site is installable on Android / iOS.
-- Built-in **dark mode** toggle in the nav (also respects `prefers-color-scheme`).
-- Keyboard-only "Skip to main content" link on every page.
+- "Join WhatsApp community" band + floating WhatsApp support button.
+- Generated `/sitemap.xml`, served `robots.txt`, PWA manifest.
+- Dark-mode toggle (respects OS preference, persists per user).
+- "Skip to main content" keyboard link.
 
-### Owners — sign in (Email + password / Google / Facebook / GitHub)
-- Sign in with email + password, or one-click via Google, Facebook or GitHub.
-- **Forgot password** + token-based reset flow (60-min expiry, single-use).
-- **Brute-force throttle** — 8 failed logins per email | IP in 15 min, then a soft lockout.
-- Multi-step claim wizard collapses to 3 steps in instant-claim mode.
-- Live slug-availability check that respects admin-reserved words.
-- Dashboard with editable profile card + change-password expander, full claim list with status badges, **DNS / Cloudflare panel** per verified claim with a Retry-DNS button, and a per-claim **Withdraw** button (releases the slug + cleans up CF DNS).
-- Tenant editor: profile, logo + banner upload, document upload (when admin requires it), notice CRUD, DNS status panel.
+### Owners
+- Email + password sign-in, or one-click via Google / Facebook / GitHub.
+- **Forgot password** — emails a single-use 60-minute reset link via SMTP.
+- 8/15-minute brute-force throttle on email login.
+- Profile gate: name + mobile + designation + institution + division /
+  district / upazila — collected once before the first claim.
+- Dashboard with sidebar — Overview, Settings, Support Developer.
+- Live "My Domains" table with status pills, search, status filter.
+- **Manage modal per claim** — edit profile, upload logo / banner / docs,
+  publish notices, **manage DNS records** (A/AAAA/CNAME/TXT/MX/NS, with
+  TTL, priority, Cloudflare proxy toggle), and Withdraw button.
+- 5/hour claim submission rate-limit (admins exempt).
 
 ### Admin
-- Moderation queue with filter by status + search by name / slug / EIIN.
-- Per-claim detail view with all uploaded documents (private — only admins can download; the doc-download bug from v2.x is fixed).
-- Four decisions: Approve · Needs info · Reject · Suspend (each with notes shown to the owner).
-- On Approve → DNS record auto-created in Cloudflare. On Reject / Suspend → record deleted.
-- DNS retry button for any approved claim whose Cloudflare call previously failed.
-- Reserved-slugs manager (add / delete blocked subdomains).
-- **Audit log** tab — every action with actor, target, action name and detail. Filter by action prefix, search, institution id.
-- **CSV exports** — `Export claims.csv` and `Export users.csv` with UTF-8 BOM (Excel reads Bengali correctly).
-- **Settings** tab — toggle `Instant claim`, `Require documents`, `Cloudflare auto-DNS`. The Cloudflare status banner shows whether the API token is configured for each brand.
-- Stats dashboard (totals by status + total users).
+- Sidebar: Overview, Approval queue, Users, Reserved slugs, Audit log,
+  Exports, Platform settings, Integrations, **Support payments**.
+- KPI tiles + recent-activity feed on the Overview pane.
+- Approval queue with **bulk decide** — checkbox-select rows, then
+  Approve / Needs info / Reject in one click.
+- Per-claim detail modal with all uploaded documents (auth-gated).
+- Cloudflare auto-DNS on Approve; record deletion on Reject / Suspend.
+- DNS retry button for any verified claim whose CF call failed.
+- Reserved-slugs CRUD.
+- Users pane — promote / demote teammates (the last admin can't be demoted).
+- Audit log with filter by action prefix, search, institution id.
+- CSV exports (claims, users) — UTF-8 BOM so Excel reads Bengali correctly.
+- **Platform settings** — toggle `Require admin approval`, `Show "Claim
+  it now" CTA`, `Cloudflare auto-DNS`. Banner shows whether CF is
+  configured for each brand.
+- **Integrations** — every secret, API key and external service edited
+  inline (OAuth client_id/secret per provider, Cloudflare token + zones,
+  WhatsApp number + community URL, **outbound email / SMTP**, JWT secret
+  with one-click rotate).
+- **Support payments** — manage the methods shown on the dashboard's
+  Support Developer pane (bKash / Nagad / Rocket / Bank / PayPal /
+  Crypto / Other), with QR URL, sort order, hidden flag.
 
-### Cloudflare auto-DNS (optional)
-- Paste a scoped API token + each brand's Zone ID + your server IP into `config.php`.
-- Approve → POST to `/zones/{zone_id}/dns_records`.
-- Reject/Suspend → DELETE the record.
-- Leave the fields blank to disable — the platform works fine without it.
+### Cloudflare auto-DNS (optional but recommended)
+- Paste a scoped API token + each brand's Zone ID + your server IP into
+  the Integrations panel.
+- Verified claims publish their A record automatically (proxied = orange
+  cloud → free SSL + cache).
+- Owner-managed records (A, AAAA, CNAME, TXT, MX, NS) push to the same
+  zone via the same token.
 
----
-
-## What changed since v1
-
-| | v1 | v2 |
-|---|---|---|
-| Sign-in | Phone-OTP (Bangladesh mobile) | Google / Facebook / GitHub OAuth (passwordless) |
-| Frontend | React + Vite build | Vanilla HTML + CSS + JS — **no build step** |
-| Homepage | Static hero + search | Dynamic stats, AJAX availability check, directory preview, WhatsApp community band |
-| Support | (none) | Floating WhatsApp icon site-wide |
-| Pretty URLs | SPA fallback only | Real pages with `/directory`, `/claim`, `/dashboard`, `/admin`, `/i/<brand>/<slug>` |
-| Migration | n/a | Idempotent — existing v1 SQLite/MySQL data is auto-upgraded |
-
-Phone-OTP routes are still mounted (`/api/auth/request-otp`, `/api/auth/verify-otp`)
-for backwards compatibility, but the UI no longer surfaces them.
+### Outbound email
+- `api/lib/mail.php` — dependency-free SMTP client with `mail()` fallback.
+- Configured from Admin → Integrations → Outbound email. Picks SMTP
+  automatically when `mail.smtp_host` is set, otherwise falls back to
+  PHP's `mail()` (cPanel's local sendmail).
+- Used by the password-reset flow (and any future transactional mail).
 
 ---
 
@@ -162,73 +185,72 @@ for backwards compatibility, but the UI no longer surfaces them.
 
 ```bash
 cd free-subdomain_platform/
-cp api/config.example.php api/config.php   # then edit jwt_secret + OAuth client IDs
+cp api/config.example.php api/config.php   # edit jwt_secret + admin_email
 php -S 127.0.0.1:8080 router.php
 ```
 
-Open <http://127.0.0.1:8080>.
-
-For local OAuth testing, register each provider's app with redirect URI
-`http://127.0.0.1:8080/api/auth/oauth/<provider>/callback` and update
-`'site_url' => 'http://127.0.0.1:8080'` in `config.php`.
+Open <http://127.0.0.1:8080>. The first request creates the SQLite DB
+and seeds the reserved-slug list + 12 demo institutions.
 
 ---
 
-## Production deploy (cPanel)
+## Production launch checklist (v3.2 final)
 
-See **INSTALL.md** for the full step-by-step. Short version:
+Before flipping the public DNS, walk through this list once.
 
-1. Unzip into `public_html/` so that `public_html/index.php`, `public_html/api/`, `public_html/uploads/`, and `public_html/auth/callback.php` all exist.
-2. Copy `api/config.example.php` → `api/config.php`. Edit `site_url`, `jwt_secret`, `admin_email`, OAuth client IDs + secrets, and WhatsApp numbers/links.
-3. Register OAuth apps with Google / Facebook / GitHub. Redirect URIs all follow the pattern `https://institution.bd/api/auth/oauth/<provider>/callback`.
-4. Make `api/data/` and `uploads/` writable (`chmod 0775`).
-5. (Optional, for MySQL) create a DB in cPanel, import `database/install.sql`, set `db_driver => 'mysql'` plus credentials in `config.php`.
-6. (Optional, for auto-DNS) fill the `cloudflare` block in `config.php`.
-7. In Cloudflare set wildcard DNS for `*.institution.bd` and `*.smartschool.bd` → your server IP.
-8. Visit `https://institution.bd/api/healthz` — you should see `{"ok":true,...}`.
+1. **`api/config.php`** copied from `api/config.example.php`, with:
+   - `'site_url'` set to `https://institution.bd` (no trailing slash).
+   - `'jwt_secret'` set to a 64-char random string
+     (`php -r "echo bin2hex(random_bytes(32));"`).
+   - `'admin_email'` set to your real email — first sign-in with that
+     account becomes admin automatically.
+   - `'demo_mode' => false`.
+2. **Database** — for production switch `'db_driver'` to `'mysql'` and fill
+   in the credentials. Schedule a daily `mysqldump`.
+3. **HTTPS** — Cloudflare Universal SSL (orange cloud) for the apex,
+   plus Advanced Cert Manager / Let's Encrypt for `*.institution.bd` and
+   `*.smartschool.bd`.
+4. **Wildcard DNS** — point `*.institution.bd` and `*.smartschool.bd` at
+   your server IP, both proxied.
+5. **Cloudflare auto-DNS** — Admin → Integrations → Cloudflare. Paste an
+   API token (`Zone:DNS:Edit` scope on both zones) + each Zone ID +
+   `target_value` (your server IPv4). Click **Test Cloudflare token**.
+6. **Outbound email** — Admin → Integrations → Outbound email. Pick SMTP
+   and paste a working host / port / user / pass (Gmail, SendGrid,
+   Mailgun, SES or your cPanel mailbox all work). Test with the
+   forgot-password flow on a throwaway account.
+7. **OAuth (optional)** — register apps at Google / Facebook / GitHub,
+   paste client_id + client_secret in Admin → Integrations → Social sign-in.
+   The redirect URIs are shown next to each provider with a Copy button.
+8. **WhatsApp** — set the support number + community invite URL in
+   Admin → Integrations → WhatsApp.
+9. **Permissions** — `api/data/` and `uploads/` writable by the PHP user
+   (`chmod 0775`).
+10. **Backups** — daily snapshot of `api/data/app.db` (or your MySQL
+    dump) + `uploads/` to off-site storage.
 
-That's it. The first request auto-creates the database schema, seeds the
-reserved-slug list, and inserts demo data.
-
----
-
-## OAuth provider quick-links
-
-| Provider | Console | What you'll paste back |
-|---|---|---|
-| Google | https://console.cloud.google.com/apis/credentials | Client ID + Client secret |
-| Facebook | https://developers.facebook.com/apps/ | App ID + App secret |
-| GitHub | https://github.com/settings/developers | Client ID + Client secret |
-
-Redirect URI (all three providers):
-`https://institution.bd/api/auth/oauth/<provider>/callback`
-
-You can enable **any subset** — leave a provider's `client_id` blank in
-`config.php` to hide that button on the login modal. At least one
-provider must be enabled.
-
----
-
-## Default admin
-
-Set `admin_email` in `config.php` to the email you'll use with Google /
-Facebook / GitHub. The first time you sign in with that account, your
-user row is auto-promoted to admin (`is_admin = 1`).
-
-Legacy fallback: `admin_phone => '01700000000'` still works if you call the
-phone-OTP API directly, but the UI no longer surfaces it.
+That's the whole list. After the first request to `/api/healthz` the
+schema is migrated and the seeds run automatically — including the new
+v3.2 `dns_records`, `support_payments` tables.
 
 ---
 
-## Tech notes
+## Where things live
 
-- **Backend:** plain PHP 8 + PDO (SQLite or MySQL). No Composer dependencies.
-- **Frontend:** vanilla HTML + CSS + JS. No bundler, no Node, no build.
-- **Auth:** stateless JWT in `Authorization: Bearer …` header (14-day TTL). OAuth state token stored in `oauth_states` for CSRF protection (10-minute TTL).
-- **Token transport:** after OAuth callback, the JWT is returned to the browser as a URL **fragment** (`#payload=…`) so it never hits server logs.
-- **Upload limits:** 4 MB images (logo/banner), 8 MB documents (NID/EIIN/board letter).
-- **Reserved slugs:** 40+ defaults seeded on first boot. Admin UI can add/remove at any time.
-- **Idempotent migrations:** the bootstrap routine adds the new `email`, `name`, `avatar_url`, `provider`, `provider_id` columns to `users` if they don't exist, so v1 → v2 upgrades just work.
+| Action | Where |
+|---|---|
+| Add / remove reserved slugs | `/admin` → Reserved slugs tab |
+| Moderate claims | `/admin` → Approval queue (bulk decide supported) |
+| Promote / demote admins | `/admin` → Users tab |
+| Retry DNS for a stuck claim | Click the claim → DNS panel → Retry DNS |
+| Edit OAuth / Cloudflare / SMTP / WhatsApp | `/admin` → Integrations |
+| Toggle admin moderation on/off | `/admin` → Platform settings |
+| Manage payment methods on Support Developer | `/admin` → Support payments |
+| Edit your institution's profile | `/dashboard` → click *Manage* |
+| Edit DNS records (owner) | `/dashboard` → click *Manage* on a verified claim → DNS records |
+| Audit log | `/admin` → Audit log tab |
+| CSV exports | `/admin` → Exports tab |
+| Reset everything (dev) | Delete `api/data/app.db` — next request re-seeds |
 
 ---
 
