@@ -1325,3 +1325,225 @@ html[data-theme="dark"] .dns-panel {
   background: rgba(20,184,166,.1);
   border-color: rgba(20,184,166,.25);
 }
+
+
+
+/* ===========================================================================
+   v3.1 — ready.bd-inspired homepage polish
+   New components: trust-band, who-grid, compare, quote-grid, hero--ready
+   =========================================================================== */
+
+/* ----- Hero — softer ambient gradient like ready.bd's product hero ----- */
+.hero--ready {
+  position: relative;
+  background:
+    radial-gradient(1200px 480px at 50% -120px, rgba(15,118,110,.18), transparent 60%),
+    radial-gradient(900px 420px at 110% 60%,   rgba(37,99,235,.12),  transparent 65%),
+    var(--c-surface);
+  overflow: hidden;
+}
+.hero--ready::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(15,23,42,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,23,42,.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+          mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  pointer-events: none;
+}
+.hero--ready .hero__inner { position: relative; }
+html[data-theme="dark"] .hero--ready {
+  background:
+    radial-gradient(1200px 480px at 50% -120px, rgba(20,184,166,.20), transparent 60%),
+    radial-gradient(900px 420px at 110% 60%,   rgba(96,165,250,.12),  transparent 65%),
+    var(--c-surface);
+}
+html[data-theme="dark"] .hero--ready::before {
+  background-image:
+    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+}
+
+/* ----- Trust band ("Trusted by …") ----- */
+.trust-band {
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  padding: 26px 0;
+}
+.trust-band__lead {
+  text-align: center; color: var(--c-muted);
+  font-size: .9rem; font-weight: 500;
+  margin: 0 0 14px;
+}
+.trust-band__row {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 10px;
+}
+.trust-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: var(--r-full);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  color: var(--c-heading);
+  font-weight: 600; font-size: .88rem;
+}
+.trust-pill__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--c-primary);
+}
+html[data-theme="dark"] .trust-pill { background: var(--c-surface-2); }
+
+/* ----- Who-it's-for grid ----- */
+.who-grid {
+  display: grid; gap: 18px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 700px)  { .who-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) { .who-grid { grid-template-columns: repeat(3, 1fr); } }
+.who-card {
+  background: #fff; border: 1px solid var(--c-border);
+  border-radius: var(--r-lg); padding: 26px 24px 22px;
+  box-shadow: var(--shadow-sm);
+  display: flex; flex-direction: column; gap: 8px;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.who-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--c-primary-100);
+}
+.who-card__ico {
+  width: 46px; height: 46px; border-radius: 12px;
+  background: var(--c-primary-50); color: var(--c-primary-700);
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-bottom: 6px;
+}
+.who-card h3 { margin: 0; font-size: 1.1rem; }
+.who-card p  { color: var(--c-muted); margin: 0; font-size: .94rem; }
+.who-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82em;
+  background: rgba(15,23,42,.05);
+  padding: 1px 6px; border-radius: 6px;
+}
+.who-card__example {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: .82rem; color: var(--c-muted);
+  border-top: 1px dashed var(--c-border);
+}
+html[data-theme="dark"] .who-card { background: var(--c-surface); }
+html[data-theme="dark"] .who-card code { background: rgba(255,255,255,.08); }
+
+/* ----- Compare table (us vs paid .com) ----- */
+.compare {
+  display: grid; gap: 18px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 760px) { .compare { grid-template-columns: 1fr 1fr; } }
+.compare__col {
+  background: #fff; border: 1px solid var(--c-border);
+  border-radius: var(--r-xl); padding: 28px 26px 24px;
+  box-shadow: var(--shadow-sm);
+}
+.compare__col--us {
+  border-color: var(--c-primary-100);
+  background: var(--c-primary-50);
+}
+.compare__col--them {
+  background: var(--c-surface);
+  opacity: .92;
+}
+.compare__head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.compare__head h3 { margin: 0; font-size: 1.25rem; }
+.compare__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.compare__list li {
+  display: flex; gap: 10px; align-items: flex-start;
+  font-size: .96rem; color: var(--c-text);
+}
+.compare__list code { background: rgba(15,23,42,.07); padding: 1px 6px; border-radius: 4px; font-size: .9em; }
+.compare__list--cross li { color: var(--c-muted); }
+.cross {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--c-danger); color: #fff;
+  flex: 0 0 18px; position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cross::before, .cross::after {
+  content: ''; position: absolute;
+  width: 9px; height: 2px; background: #fff; border-radius: 1px;
+}
+.cross::before { transform: rotate(45deg); }
+.cross::after  { transform: rotate(-45deg); }
+html[data-theme="dark"] .compare__col--us {
+  background: rgba(20,184,166,.08);
+  border-color: rgba(20,184,166,.3);
+}
+html[data-theme="dark"] .compare__list code { background: rgba(255,255,255,.08); }
+
+/* ----- Testimonial / quote grid ----- */
+.quote-grid {
+  display: grid; gap: 18px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 760px) { .quote-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) { .quote-grid { grid-template-columns: repeat(3, 1fr); } }
+.quote {
+  background: #fff; border: 1px solid var(--c-border);
+  border-radius: var(--r-lg); padding: 26px 24px;
+  box-shadow: var(--shadow-sm);
+  margin: 0;
+  position: relative;
+}
+.quote::before {
+  content: '"';
+  position: absolute; top: 8px; left: 18px;
+  font-family: 'Raleway', serif;
+  font-size: 4rem; color: var(--c-primary-100);
+  line-height: 1;
+  font-weight: 800;
+}
+.quote blockquote {
+  margin: 0 0 16px; padding: 0;
+  font-size: 1rem; line-height: 1.65; color: var(--c-text);
+  font-weight: 500;
+  position: relative; z-index: 1;
+}
+.quote blockquote code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: rgba(15,23,42,.06);
+  padding: 1px 6px; border-radius: 4px; font-size: .88em;
+}
+.quote figcaption {
+  display: flex; flex-direction: column; gap: 2px;
+  border-top: 1px solid var(--c-border);
+  padding-top: 14px;
+  font-size: .85rem;
+}
+.quote__name { font-weight: 700; color: var(--c-heading); }
+.quote__role { color: var(--c-muted); }
+html[data-theme="dark"] .quote { background: var(--c-surface); }
+html[data-theme="dark"] .quote blockquote code { background: rgba(255,255,255,.08); }
+
+/* ----- Hero title — slightly tighter on the new layout ----- */
+.hero--ready .hero__title {
+  font-size: clamp(2.2rem, 5.4vw, 3.8rem);
+}
+.hero--ready .hero__sub {
+  font-size: 1.12rem;
+  max-width: 64ch;
+}
+
+/* ----- Mobile tightening ----- */
+@media (max-width: 767px) {
+  .trust-band { padding: 20px 0 18px; }
+  .trust-pill { padding: 6px 12px; font-size: .82rem; }
+  .compare__col { padding: 22px 20px 18px; }
+  .compare__list li { font-size: .92rem; }
+  .quote { padding: 22px 20px; }
+  .quote::before { font-size: 3rem; top: 4px; left: 14px; }
+  .who-card { padding: 22px 20px 18px; }
+}

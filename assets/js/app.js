@@ -147,8 +147,35 @@
   function isAuthed() { return !!getToken(); }
   function isAdmin() { const u = getUser(); return !!(u && u.is_admin); }
 
+  /**
+   * v3.1 — show/hide elements based on whether someone is signed in or is
+   * an admin. Used by the footer / nav so we don't leak the Admin link
+   * to normal visitors.
+   *
+   *   <a data-auth-only  hidden …>My dashboard</a>
+   *   <a data-admin-only hidden …>Admin</a>
+   *   <a data-guest-only          …>Sign in</a>   (hidden once authed)
+   */
+  function applyVisibilityGates() {
+    const authed = isAuthed();
+    const admin  = isAdmin();
+    document.querySelectorAll('[data-auth-only]').forEach((el) => {
+      el.hidden = !authed;
+    });
+    document.querySelectorAll('[data-admin-only]').forEach((el) => {
+      el.hidden = !admin;
+    });
+    document.querySelectorAll('[data-guest-only]').forEach((el) => {
+      el.hidden = !!authed;
+    });
+  }
+
   function renderUserChip() {
     const host = document.querySelector('[data-user-chip]');
+    // v3.1 — also reveal/hide elements gated by [data-admin-only] / [data-auth-only]
+    // anywhere on the page (footer links, nav items, etc.) so the Admin tile
+    // never leaks to a normal visitor.
+    applyVisibilityGates();
     if (!host) return;
     const user = getUser();
     host.innerHTML = '';
@@ -578,6 +605,7 @@
   window.App = {
     api, qs,
     getToken, getUser, setSession, clearSession, isAuthed, isAdmin,
+    applyVisibilityGates,
     getSettings,
     openAuthModal, closeAuthModal, requireAuth,
     toast, escapeHtml, initialsOf, fmtDate, debounce,

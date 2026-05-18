@@ -75,6 +75,11 @@ $routes = [
     ['GET',    '#^admin/settings$#',                                         'route_admin_settings_get'],
     ['POST',   '#^admin/settings$#',                                         'route_admin_settings_set'],
 
+    ['GET',    '#^admin/integrations$#',                                     'route_admin_integrations_get'],
+    ['POST',   '#^admin/integrations$#',                                     'route_admin_integrations_set'],
+    ['POST',   '#^admin/integrations/test$#',                                'route_admin_integrations_test'],
+    ['POST',   '#^admin/integrations/rotate-jwt$#',                          'route_admin_integrations_rotate_jwt'],
+
     ['GET',    '#^sitemap\.xml$#',                                           'route_public_sitemap'],
 ];
 

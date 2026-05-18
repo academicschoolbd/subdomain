@@ -60,6 +60,7 @@
         <button class="tab" data-tab="audit">Audit log</button>
         <button class="tab" data-tab="exports">Exports</button>
         <button class="tab" data-tab="settings">Settings</button>
+        <button class="tab" data-tab="integrations">Integrations</button>
       </div>
 
       <!-- queue -->
@@ -118,6 +119,11 @@
       <!-- v3.0: platform settings -->
       <section data-pane="settings" hidden>
         <div data-settings-host></div>
+      </section>
+
+      <!-- v3.1: integrations (OAuth, Cloudflare, WhatsApp, branding, JWT) -->
+      <section data-pane="integrations" hidden>
+        <div data-integrations-host></div>
       </section>
     </div>
   </div>
