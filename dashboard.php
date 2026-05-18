@@ -243,6 +243,7 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/bd-locations.js"></script>
 <script src="/assets/js/dashboard.js"></script>
 </body>
 </html>

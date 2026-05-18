@@ -384,9 +384,18 @@
             <div class="field"><label class="label">নাম (বাংলা)</label><input name="name_bn" value="${App.escapeHtml(c.name_bn || '')}" /></div>
             <div class="field"><label class="label">Category</label><input name="category" value="${App.escapeHtml(c.category || '')}" /></div>
             <div class="field"><label class="label">EIIN</label><input name="eiin" value="${App.escapeHtml(c.eiin || '')}" /></div>
-            <div class="field"><label class="label">Division</label><input name="division" value="${App.escapeHtml(c.division || '')}" /></div>
-            <div class="field"><label class="label">District</label><input name="district" value="${App.escapeHtml(c.district || '')}" /></div>
-            <div class="field"><label class="label">Upazila</label><input name="upazila" value="${App.escapeHtml(c.upazila || '')}" /></div>
+            <div class="field"><label class="label">Division</label>
+              <select name="division" data-bd-division>
+                <option value="">— Select division —</option>
+              </select></div>
+            <div class="field"><label class="label">District</label>
+              <select name="district" data-bd-district>
+                <option value="">— Select division first —</option>
+              </select></div>
+            <div class="field"><label class="label">Upazila</label>
+              <select name="upazila" data-bd-upazila>
+                <option value="">— Select district first —</option>
+              </select></div>
             <div class="field field--wide"><label class="label">Address</label><input name="address" value="${App.escapeHtml(c.address || '')}" /></div>
             <div class="field"><label class="label">Contact name</label><input name="contact_name" value="${App.escapeHtml(c.contact_name || '')}" /></div>
             <div class="field"><label class="label">Contact phone</label><input name="contact_phone" value="${App.escapeHtml(c.contact_phone || '')}" /></div>
@@ -448,6 +457,19 @@
     if (c.status === 'verified') loadNotices(c.id);
     const x = manageBody.querySelector('[data-manage-close-2]');
     if (x) x.addEventListener('click', closeManage);
+
+    // BD-locations cascade for the per-claim profile form inside the modal.
+    if (window.BDLocations) {
+      const root = manageBody.querySelector('[data-form-profile]');
+      if (root) {
+        window.BDLocations.bind(
+          root.querySelector('[data-bd-division]'),
+          root.querySelector('[data-bd-district]'),
+          root.querySelector('[data-bd-upazila]'),
+          { division: c.division || '', district: c.district || '', upazila: c.upazila || '' }
+        );
+      }
+    }
   }
 
   function wireManageInternals(id) {
@@ -626,14 +648,16 @@
             <input name="institution_name" value="${v(u.institution_name)}" required maxlength="200" /></div>
           <div class="field"><label class="label">বিভাগ / Division</label>
             <select name="division" required>
-              <option value="">— Select —</option>
-              ${['Dhaka','Chattogram','Khulna','Rajshahi','Rangpur','Sylhet','Mymensingh','Barishal']
-                .map((d) => `<option ${u.division===d?'selected':''}>${d}</option>`).join('')}
+              <option value="">— Select division —</option>
             </select></div>
           <div class="field"><label class="label">জেলা / District</label>
-            <input name="district" value="${v(u.district)}" required maxlength="80" /></div>
+            <select name="district" required>
+              <option value="">— Select division first —</option>
+            </select></div>
           <div class="field field--wide"><label class="label">উপজেলা / Upazila / Thana</label>
-            <input name="upazila" value="${v(u.upazila)}" required maxlength="80" /></div>
+            <select name="upazila" required>
+              <option value="">— Select district first —</option>
+            </select></div>
           <div class="field field--wide text-right">
             <button class="btn btn--primary" type="submit">Save profile</button>
           </div>
@@ -652,6 +676,22 @@
           </form>
         </details>
       </article>`;
+
+    // Wire the BD-locations cascade for the Settings pane account form. It
+    // round-trips with the existing free-text values: anything the user had
+    // saved before that doesn't match the canonical list is preserved as a
+    // "(saved)" sentinel option.
+    if (window.BDLocations) {
+      const f = host.querySelector('[data-account-form]');
+      if (f) {
+        window.BDLocations.bind(
+          f.querySelector('[name="division"]'),
+          f.querySelector('[name="district"]'),
+          f.querySelector('[name="upazila"]'),
+          { division: u.division || '', district: u.district || '', upazila: u.upazila || '' }
+        );
+      }
+    }
 
     host.querySelector('[data-account-form]').addEventListener('submit', async (ev) => {
       ev.preventDefault();
