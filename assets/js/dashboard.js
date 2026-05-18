@@ -122,6 +122,7 @@
         // The Settings pane mounts the account-card the first time it's
         // opened so we don't waste a render on the Overview path.
         if (name === 'settings') renderAccountCard();
+        if (name === 'support')  renderSupportPayments();
       });
     });
 
@@ -445,6 +446,12 @@
         <div data-notices="${c.id}" class="mt-3"></div>
       </div>` : ''}
 
+      ${c.status === 'verified' ? `
+      <div class="mt-4">
+        <h4>DNS records</h4>
+        <div data-dns-host="${c.id}"></div>
+      </div>` : ''}
+
       <footer class="manage-foot mt-4">
         ${['pending','needs_info','rejected'].includes(c.status)
           ? `<button class="btn btn--ghost btn--danger-text" data-withdraw="${c.id}" type="button">Withdraw claim</button>`
@@ -455,6 +462,7 @@
     wireManageInternals(c.id);
     loadDocs(c.id);
     if (c.status === 'verified') loadNotices(c.id);
+    if (c.status === 'verified') loadDnsRecords(c.id);
     const x = manageBody.querySelector('[data-manage-close-2]');
     if (x) x.addEventListener('click', closeManage);
 
@@ -726,6 +734,234 @@
           const first = Object.keys(e.errors)[0];
           App.toast(e.errors[first], 'error');
         } else { App.toast(e.detail || 'Could not update password', 'error'); }
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Support Developer payment methods (admin-managed)         */
+  /* ---------------------------------------------------------------- */
+  const PAY_BRAND = {
+    bkash:  { label: 'bKash',  color: '#e2136e' },
+    nagad:  { label: 'Nagad',  color: '#f47216' },
+    rocket: { label: 'Rocket', color: '#8a2be2' },
+    upay:   { label: 'Upay',   color: '#ec1b23' },
+    tap:    { label: 'Tap',    color: '#0ea5e9' },
+    bank:   { label: 'Bank',   color: '#0f766e' },
+    card:   { label: 'Card',   color: '#1f2937' },
+    paypal: { label: 'PayPal', color: '#003087' },
+    crypto: { label: 'Crypto', color: '#f59e0b' },
+    other:  { label: 'Other',  color: '#475569' },
+  };
+  let _paymentsLoaded = false;
+  function renderSupportPayments() {
+    const host = document.querySelector('[data-payments-host]');
+    if (!host || _paymentsLoaded) return;
+    host.innerHTML = '<div class="card"><div class="skeleton" style="height:120px;"></div></div>';
+    App.api('/support/payments').then((r) => {
+      _paymentsLoaded = true;
+      const items = (r && r.items) || [];
+      if (!items.length) { host.innerHTML = ''; return; }
+      host.innerHTML = `
+        <article class="card dash-support">
+          <h3 style="margin-top:0;">Support us with a tip</h3>
+          <p class="text-muted">Every contribution helps us keep institution.bd free for everyone. Send to any of the methods below.</p>
+          <div class="pay-grid">${items.map(payCard).join('')}</div>
+        </article>`;
+      host.querySelectorAll('[data-copy-pay]').forEach((b) => {
+        b.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const text = b.getAttribute('data-copy-pay') || '';
+          try {
+            await navigator.clipboard.writeText(text);
+            App.toast('Copied "' + text + '"', 'success');
+          } catch { App.toast('Could not copy', 'error'); }
+        });
+      });
+    }).catch(() => { host.innerHTML = ''; });
+  }
+  function payCard(p) {
+    const meta = PAY_BRAND[p.method] || PAY_BRAND.other;
+    const num = (p.number || '').trim();
+    return `
+      <div class="pay-card">
+        <header class="pay-card__head">
+          <span class="pay-card__pill" style="background:${meta.color};">${App.escapeHtml(meta.label)}</span>
+          <strong>${App.escapeHtml(p.label)}</strong>
+        </header>
+        ${num ? `
+          <div class="pay-card__num">
+            <code>${App.escapeHtml(num)}</code>
+            <button type="button" class="btn btn--sm" data-copy-pay="${App.escapeHtml(num)}">Copy</button>
+          </div>` : ''}
+        ${p.note ? `<p class="pay-card__note">${App.escapeHtml(p.note)}</p>` : ''}
+        ${p.qr_url ? `<a class="pay-card__qr" href="${App.escapeHtml(p.qr_url)}" target="_blank" rel="noopener">View QR →</a>` : ''}
+      </div>`;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — DNS records manager (verified domains only)               */
+  /* ---------------------------------------------------------------- */
+  const DNS_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS'];
+
+  function dnsTypePill(type, status) {
+    const cls = status === 'live' ? 'badge--verified'
+              : status === 'error' ? 'badge--danger'
+              : 'badge';
+    return `<span class="badge ${cls}">${App.escapeHtml(type)}${status && status !== 'live' ? ' · ' + App.escapeHtml(status) : ''}</span>`;
+  }
+
+  async function loadDnsRecords(claimId) {
+    const host = manageBody && manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton" style="height:80px;"></div>';
+    try {
+      const r = await App.api('/tenant/' + claimId + '/dns');
+      const items = r.items || [];
+      const cfHint = r.cf_configured
+        ? '<span class="text-muted">Records publish to Cloudflare automatically.</span>'
+        : '<span class="text-muted">Cloudflare is not configured — records save locally only; an admin must publish them upstream.</span>';
+      host.innerHTML = `
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <p class="text-muted" style="margin:0;">Manage DNS records for <code>${App.escapeHtml(r.subdomain)}</code>. ${cfHint}</p>
+          <button class="btn btn--sm btn--primary" data-dns-add="${claimId}" type="button">+ Add record</button>
+        </div>
+        ${items.length ? `
+          <div class="dash-table-wrap">
+            <table class="dash-table dns-table">
+              <thead><tr>
+                <th>Type</th><th>Name</th><th>Content</th><th>TTL</th><th>Proxied</th><th class="text-right">Action</th>
+              </tr></thead>
+              <tbody>${items.map((d) => dnsRow(d, claimId, r.subdomain)).join('')}</tbody>
+            </table>
+          </div>` : `
+          <div class="dash-empty"><p>No DNS records yet — add one to start pointing this subdomain at your hosting.</p></div>`}
+      `;
+      wireDnsActions(claimId, r.subdomain, items);
+    } catch (e) {
+      host.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Could not load DNS records') + '</p>';
+    }
+  }
+  function dnsRow(d, claimId, subdomain) {
+    const fqdn = (d.name === '@' || d.name === '' || d.name === subdomain) ? subdomain : (d.name + '.' + subdomain);
+    return `
+      <tr data-dns-row="${d.id}">
+        <td>${dnsTypePill(d.type, d.cf_status || '')}</td>
+        <td><code>${App.escapeHtml(fqdn)}</code></td>
+        <td><code style="word-break:break-all;">${App.escapeHtml(d.content)}</code>${d.priority !== null && d.priority !== undefined ? ' <span class="text-muted">(prio ' + d.priority + ')</span>' : ''}</td>
+        <td>${d.ttl === 1 ? 'Auto' : App.escapeHtml(String(d.ttl))}</td>
+        <td>${d.proxied ? '☁︎' : '<span class="text-muted">—</span>'}</td>
+        <td class="text-right">
+          <button class="btn btn--sm" data-dns-edit="${d.id}" type="button">Edit</button>
+          <button class="btn btn--ghost btn--sm btn--danger-text" data-dns-del="${d.id}" type="button">Delete</button>
+        </td>
+      </tr>`;
+  }
+  function wireDnsActions(claimId, subdomain, items) {
+    const root = manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!root) return;
+    root.querySelectorAll('[data-dns-add]').forEach((b) => {
+      b.addEventListener('click', () => openDnsForm(claimId, subdomain, null));
+    });
+    root.querySelectorAll('[data-dns-edit]').forEach((b) => {
+      const id = parseInt(b.getAttribute('data-dns-edit'), 10);
+      const rec = items.find((x) => x.id === id);
+      b.addEventListener('click', () => rec && openDnsForm(claimId, subdomain, rec));
+    });
+    root.querySelectorAll('[data-dns-del]').forEach((b) => {
+      const id = parseInt(b.getAttribute('data-dns-del'), 10);
+      b.addEventListener('click', async () => {
+        if (!confirm('Delete this DNS record? This cannot be undone.')) return;
+        try {
+          await App.api('/tenant/' + claimId + '/dns/' + id, { method: 'DELETE' });
+          App.toast('Record deleted', 'success');
+          loadDnsRecords(claimId);
+        } catch (e) {
+          App.toast((e && e.detail) || 'Delete failed', 'error');
+        }
+      });
+    });
+  }
+  function openDnsForm(claimId, subdomain, rec) {
+    const host = manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!host) return;
+    const isEdit = !!rec;
+    const safe = (v) => App.escapeHtml(v == null ? '' : String(v));
+    host.innerHTML = `
+      <article class="card dns-form">
+        <header class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <h4 style="margin:0;">${isEdit ? 'Edit DNS record' : 'Add DNS record'}</h4>
+          <button class="btn btn--ghost btn--sm" type="button" data-dns-cancel>Cancel</button>
+        </header>
+        <form data-dns-save="${claimId}" class="form-grid mt-2">
+          <div class="field"><label class="label">Type</label>
+            <select name="type" required>
+              ${DNS_TYPES.map((t) => `<option value="${t}" ${rec && rec.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label class="label">Name</label>
+            <input name="name" value="${safe(rec ? rec.name : '@')}" placeholder="@ for apex, or e.g. www, mail" required maxlength="120" />
+            <p class="hint">Use <code>@</code> for the apex (<code>${safe(subdomain)}</code>). Other labels are prepended.</p>
+          </div>
+          <div class="field field--wide"><label class="label">Content / Value</label>
+            <input name="content" value="${safe(rec ? rec.content : '')}" placeholder="e.g. 203.0.113.10  or  hostname.example.com" required maxlength="512" />
+          </div>
+          <div class="field"><label class="label">TTL (seconds)</label>
+            <input name="ttl" type="number" min="0" value="${safe(rec ? rec.ttl : 1)}" />
+            <p class="hint">1 = automatic / Cloudflare-default.</p>
+          </div>
+          <div class="field" data-dns-mx ${rec && rec.type === 'MX' ? '' : 'hidden'}>
+            <label class="label">Priority (MX only)</label>
+            <input name="priority" type="number" min="0" max="65535" value="${safe(rec && rec.priority != null ? rec.priority : 10)}" />
+          </div>
+          <div class="field field--wide" data-dns-proxy ${rec && ['A','AAAA','CNAME'].includes(rec.type) ? '' : 'hidden'}>
+            <label class="toggle-row">
+              <input type="checkbox" name="proxied" ${rec && rec.proxied ? 'checked' : ''} />
+              <span><strong>Proxy through Cloudflare (orange cloud)</strong><span class="text-muted"> — Cloudflare's automatic SSL and cache.</span></span>
+            </label>
+          </div>
+          <div class="field field--wide text-right">
+            <button class="btn btn--primary" type="submit">${isEdit ? 'Save changes' : 'Create record'}</button>
+          </div>
+        </form>
+      </article>`;
+    const form    = host.querySelector('[data-dns-save]');
+    const typeSel = form.querySelector('[name=type]');
+    const mxField = form.querySelector('[data-dns-mx]');
+    const proxyF  = form.querySelector('[data-dns-proxy]');
+    typeSel.addEventListener('change', () => {
+      const t = typeSel.value;
+      mxField.hidden = (t !== 'MX');
+      proxyF.hidden  = !['A', 'AAAA', 'CNAME'].includes(t);
+    });
+    host.querySelector('[data-dns-cancel]').addEventListener('click', () => loadDnsRecords(claimId));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        type:     (fd.get('type') || 'A').toString(),
+        name:     (fd.get('name') || '@').toString().trim() || '@',
+        content:  (fd.get('content') || '').toString().trim(),
+        ttl:      parseInt(fd.get('ttl') || '1', 10),
+        priority: fd.get('priority') ? parseInt(fd.get('priority'), 10) : null,
+        proxied:  !!fd.get('proxied'),
+      };
+      try {
+        if (isEdit) {
+          await App.api('/tenant/' + claimId + '/dns/' + rec.id, { method: 'PATCH', body: payload });
+          App.toast('Record updated', 'success');
+        } else {
+          await App.api('/tenant/' + claimId + '/dns', { method: 'POST', body: payload });
+          App.toast('Record created', 'success');
+        }
+        loadDnsRecords(claimId);
+      } catch (err) {
+        if (err && err.errors) {
+          const first = Object.keys(err.errors)[0];
+          App.toast(err.errors[first], 'error');
+        } else {
+          App.toast((err && err.detail) || 'Save failed', 'error');
+        }
       }
     });
   }

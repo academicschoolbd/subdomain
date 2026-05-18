@@ -1,3 +1,25 @@
+<?php
+/**
+ * Home page — server-renders the live platform stats inline so the
+ * realtime tiles never show a loading skeleton on first paint. They
+ * still auto-refresh every 30 s in the background.
+ */
+$_initialStats = ['users_registered' => 0, 'claims_total' => 0, 'claims_pending' => 0, 'claims_rejected' => 0];
+try {
+    require_once __DIR__ . '/api/bootstrap.php';
+    $pdo = db($CONFIG);
+    $byStatus = ['verified' => 0, 'pending' => 0, 'needs_info' => 0, 'rejected' => 0, 'suspended' => 0, 'seeded' => 0];
+    foreach ($pdo->query("SELECT status, COUNT(*) c FROM institutions GROUP BY status")->fetchAll() as $r) {
+        $byStatus[$r['status']] = (int)$r['c'];
+    }
+    $_initialStats = [
+        'users_registered' => (int)$pdo->query('SELECT COUNT(*) c FROM users')->fetch()['c'],
+        'claims_total'     => $byStatus['verified'] + $byStatus['pending'] + $byStatus['needs_info'] + $byStatus['rejected'] + $byStatus['suspended'],
+        'claims_pending'   => $byStatus['pending'] + $byStatus['needs_info'],
+        'claims_rejected'  => $byStatus['rejected'] + $byStatus['suspended'],
+    ];
+} catch (Throwable $_e) { /* fall back to zeros on first install */ }
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -74,14 +96,30 @@
           <option value="smartschool.bd">.smartschool.bd</option>
         </select>
       </span>
-      <button type="submit" class="btn btn--primary search-hero__submit" data-slug-claim aria-disabled="true">Search</button>
+      <button type="submit" class="btn btn--primary search-hero__submit" data-slug-claim>Search</button>
     </form>
-    <p class="slug-status text-center" data-slug-status></p>
 
-    <p class="hero__counter" data-hero-counter>
-      <span class="hero__counter-dot"></span>
-      <span data-hero-counter-text>Loading platform stats…</span>
-    </p>
+    <!-- v3.2 — search result card (matches the requested ready.bd-style UX). -->
+    <div class="search-result" data-search-result hidden role="status" aria-live="polite">
+      <div class="search-result__main">
+        <span class="search-result__ico" data-result-ico aria-hidden="true"></span>
+        <div class="search-result__body">
+          <div class="search-result__title" data-result-title></div>
+          <p class="search-result__sub" data-result-sub></p>
+        </div>
+        <a class="btn btn--primary" data-result-cta href="#" hidden>Claim Now</a>
+      </div>
+      <div class="search-result__alt" data-result-alt hidden>
+        <span class="search-result__alt-label">Also available:</span>
+        <div class="search-result__alt-row">
+          <code data-alt-name></code>
+          <a class="btn btn--outline btn--sm" data-alt-cta href="#">Claim</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- legacy slug-status pill (kept hidden, app.js still references the data-attribute on other pages). -->
+    <p class="slug-status text-center" data-slug-status hidden></p>
 
     <ul class="check-row" aria-label="What's included">
       <li><span class="check"></span> Live in &lt; 60 seconds</li>
@@ -101,22 +139,6 @@
   </div>
 </header>
 
-<!-- ============================ TRUST STRIP ============================ -->
-<section class="trust-band" aria-label="Trusted by institutions across Bangladesh">
-  <div class="container">
-    <p class="trust-band__lead">Already trusted by institutions across all eight divisions of Bangladesh —</p>
-    <div class="trust-band__row">
-      <span class="trust-pill"><span class="trust-pill__dot"></span> Schools</span>
-      <span class="trust-pill"><span class="trust-pill__dot"></span> Colleges</span>
-      <span class="trust-pill"><span class="trust-pill__dot"></span> Universities</span>
-      <span class="trust-pill"><span class="trust-pill__dot"></span> Madrasas</span>
-      <span class="trust-pill"><span class="trust-pill__dot"></span> Polytechnics</span>
-      <span class="trust-pill"><span class="trust-pill__dot"></span> Coaching centres</span>
-      <span class="trust-pill"><span class="trust-pill__dot"></span> NGOs</span>
-    </div>
-  </div>
-</section>
-
 <!-- ============================ LIVE STATS ============================ -->
 <section class="live-stats" id="live-stats" aria-label="Realtime platform activity">
   <div class="container">
@@ -128,35 +150,35 @@
       <span class="live-stats__pulse"><span class="pulse-dot"></span> Live · auto-refresh every 30 s</span>
     </div>
     <div class="live-stats__grid" data-live-stats>
-      <div class="stat-tile is-loading">
+      <div class="stat-tile">
         <span class="stat-tile__ico" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </span>
-        <span class="stat-tile__num" data-tile="users">0</span>
+        <span class="stat-tile__num" data-tile="users"><?= number_format($_initialStats['users_registered']) ?></span>
         <span class="stat-tile__lab">Users registered</span>
         <span class="stat-tile__delta" data-tile-delta="users"></span>
       </div>
-      <div class="stat-tile stat-tile--claims is-loading">
+      <div class="stat-tile stat-tile--claims">
         <span class="stat-tile__ico" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         </span>
-        <span class="stat-tile__num" data-tile="claims_total">0</span>
+        <span class="stat-tile__num" data-tile="claims_total"><?= number_format($_initialStats['claims_total']) ?></span>
         <span class="stat-tile__lab">Domains claimed (total)</span>
         <span class="stat-tile__delta" data-tile-delta="claims_total"></span>
       </div>
-      <div class="stat-tile stat-tile--pending is-loading">
+      <div class="stat-tile stat-tile--pending">
         <span class="stat-tile__ico" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </span>
-        <span class="stat-tile__num" data-tile="pending">0</span>
+        <span class="stat-tile__num" data-tile="pending"><?= number_format($_initialStats['claims_pending']) ?></span>
         <span class="stat-tile__lab">Pending review</span>
         <span class="stat-tile__delta" data-tile-delta="pending"></span>
       </div>
-      <div class="stat-tile stat-tile--rejected is-loading">
+      <div class="stat-tile stat-tile--rejected">
         <span class="stat-tile__ico" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
         </span>
-        <span class="stat-tile__num" data-tile="rejected">0</span>
+        <span class="stat-tile__num" data-tile="rejected"><?= number_format($_initialStats['claims_rejected']) ?></span>
         <span class="stat-tile__lab">Rejected</span>
         <span class="stat-tile__delta" data-tile-delta="rejected"></span>
       </div>
@@ -191,69 +213,8 @@
   </div>
 </section>
 
-<!-- ============================ WHO IT'S FOR ============================ -->
-<section id="who" class="who">
-  <div class="container">
-    <div class="section__head">
-      <span class="eyebrow">Who it's for</span>
-      <h2>Built for every kind of Bangladeshi institution</h2>
-      <p>One platform, one verified directory — whether you serve 50 students or 50,000.</p>
-    </div>
-    <div class="who-grid">
-      <article class="who-card">
-        <span class="who-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6v9a2 2 0 0 1-2 2h-4v-7H10v7H6a2 2 0 0 1-2-2v-9z"/></svg>
-        </span>
-        <h3>Schools &amp; Madrasas</h3>
-        <p>Give parents one easy address — <code>yourschool.smartschool.bd</code>. Notices, gallery, admissions, in Bengali or English.</p>
-        <span class="who-card__example">e.g. <code>drmc.smartschool.bd</code></span>
-      </article>
-      <article class="who-card">
-        <span class="who-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-        </span>
-        <h3>Colleges &amp; Universities</h3>
-        <p>A clean, verified domain for departments, hall pages, club societies — without a single tk of hosting cost.</p>
-        <span class="who-card__example">e.g. <code>buet.institution.bd</code></span>
-      </article>
-      <article class="who-card">
-        <span class="who-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1"/></svg>
-        </span>
-        <h3>Polytechnics &amp; Training</h3>
-        <p>Highlight courses, batches and placements on a no-fuss subdomain that takes one minute to set up.</p>
-        <span class="who-card__example">e.g. <code>dhakapolytechnic.institution.bd</code></span>
-      </article>
-      <article class="who-card">
-        <span class="who-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
-        </span>
-        <h3>Coaching Centres</h3>
-        <p>Run your own admissions page with a memorable URL parents trust — verified, with HTTPS and Bengali built-in.</p>
-        <span class="who-card__example">e.g. <code>uccoaching.smartschool.bd</code></span>
-      </article>
-      <article class="who-card">
-        <span class="who-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </span>
-        <h3>NGOs &amp; Foundations</h3>
-        <p>Tell your impact story on a credible <code>.institution.bd</code>. Free hosting via subdomain forwarding too.</p>
-        <span class="who-card__example">e.g. <code>brac.institution.bd</code></span>
-      </article>
-      <article class="who-card">
-        <span class="who-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-        </span>
-        <h3>Anyone serving learners</h3>
-        <p>Kindergartens, libraries, scout groups, cultural academies — if you teach, this subdomain is for you.</p>
-        <span class="who-card__example">e.g. <code>littlestars.smartschool.bd</code></span>
-      </article>
-    </div>
-  </div>
-</section>
-
 <!-- ============================ FEATURES ============================ -->
-<section id="features" class="section--alt">
+<section id="features">
   <div class="container">
     <div class="section__head">
       <span class="eyebrow">What you get</span>
@@ -284,23 +245,23 @@
       </div>
       <div class="pro-card">
         <span class="pro-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-        </span>
-        <h3>Easy dashboard</h3>
-        <p>Update logo, banner, "about", post notices to parents and students — straight from your browser.</p>
-      </div>
-      <div class="pro-card">
-        <span class="pro-card__ico" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </span>
         <h3>Verified directory</h3>
         <p>Admin moderation + EIIN / board-letter check keeps the public directory clean and trustworthy.</p>
       </div>
       <div class="pro-card">
+        <span class="pro-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-5 9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
+        </span>
+        <h3>Full DNS control</h3>
+        <p>Once verified, manage A, AAAA, CNAME, TXT, MX and NS records yourself — straight from your dashboard.</p>
+      </div>
+      <div class="pro-card pro-card--wa">
         <span class="pro-card__ico pro-card__ico--wa" aria-hidden="true">
           <img src="/assets/img/whatsapp.svg" alt="" />
         </span>
-        <h3>WhatsApp support <span class="pro-card__tag">Beta</span></h3>
+        <h3>WhatsApp support</h3>
         <p>Floating WhatsApp button on every page. Get help in Bengali or English, in real time.</p>
       </div>
     </div>
@@ -308,7 +269,7 @@
 </section>
 
 <!-- ============================ HOW IT WORKS ============================ -->
-<section id="how">
+<section id="how" class="section--alt">
   <div class="container">
     <div class="section__head">
       <span class="eyebrow">How it works</span>
@@ -336,47 +297,6 @@
   </div>
 </section>
 
-<!-- ============================ COMPARE / WHY ============================ -->
-<section id="why" class="section--alt">
-  <div class="container">
-    <div class="section__head">
-      <span class="eyebrow">Why us</span>
-      <h2>Why pick institution.bd over a paid <code>.com</code>?</h2>
-      <p>A side-by-side look at what you actually get.</p>
-    </div>
-    <div class="compare">
-      <div class="compare__col compare__col--us">
-        <div class="compare__head">
-          <span class="badge badge--brand">institution.bd</span>
-          <h3>Free, verified, Bangladeshi</h3>
-        </div>
-        <ul class="compare__list">
-          <li><span class="check"></span> Free forever — no card, no renewal fee</li>
-          <li><span class="check"></span> Live in &lt; 60 seconds, no document required</li>
-          <li><span class="check"></span> Auto SSL via Cloudflare on every subdomain</li>
-          <li><span class="check"></span> Bengali + English-ready out of the box</li>
-          <li><span class="check"></span> Verified directory, anti-impersonation moderation</li>
-          <li><span class="check"></span> WhatsApp support in Bengali</li>
-        </ul>
-      </div>
-      <div class="compare__col compare__col--them">
-        <div class="compare__head">
-          <span class="badge badge--muted">Paid <code>.com</code> / .org</span>
-          <h3>Generic, expensive, slow</h3>
-        </div>
-        <ul class="compare__list compare__list--cross">
-          <li><span class="cross"></span> ৳1,200+ / year, every year, forever</li>
-          <li><span class="cross"></span> Card required, foreign-currency renewal</li>
-          <li><span class="cross"></span> SSL is extra — or you set it up yourself</li>
-          <li><span class="cross"></span> No Bengali support, no local context</li>
-          <li><span class="cross"></span> No verified directory — anyone can squat</li>
-          <li><span class="cross"></span> Email-only support in English</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- ============================ DIRECTORY PREVIEW ============================ -->
 <section>
   <div class="container">
@@ -394,40 +314,6 @@
       <div class="dir-skeleton skeleton"></div>
       <div class="dir-skeleton skeleton"></div>
       <div class="dir-skeleton skeleton"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ TESTIMONIALS ============================ -->
-<section id="voices" class="section--alt">
-  <div class="container">
-    <div class="section__head">
-      <span class="eyebrow">Voices from the field</span>
-      <h2>What admins are saying</h2>
-      <p>Early feedback from school principals and university IT teams across Bangladesh.</p>
-    </div>
-    <div class="quote-grid">
-      <figure class="quote">
-        <blockquote>"আমাদের মাদ্রাসার নিজস্ব ওয়েবসাইট ছিল না। এক মিনিটেই subdomain পেয়ে গেলাম, parents এখন সরাসরি দেখতে পান।"</blockquote>
-        <figcaption>
-          <span class="quote__name">Md. Hasanul Karim</span>
-          <span class="quote__role">Principal · Darul Ihsan Madrasah, Sylhet</span>
-        </figcaption>
-      </figure>
-      <figure class="quote">
-        <blockquote>"Free SSL on a Bangladesh-focused TLD is a big win — we point our department subdomains here and forget about renewals."</blockquote>
-        <figcaption>
-          <span class="quote__name">Tanzim Ahmed</span>
-          <span class="quote__role">IT Lead · BUET CSE</span>
-        </figcaption>
-      </figure>
-      <figure class="quote">
-        <blockquote>"আমাদের কোচিং সেন্টারের admission পেজ এখন <code>uccoaching.smartschool.bd</code>—parents শেয়ার করতে গিয়ে দ্বিধা করেন না।"</blockquote>
-        <figcaption>
-          <span class="quote__name">Farzana Rahman</span>
-          <span class="quote__role">Director · UC Coaching, Chattogram</span>
-        </figcaption>
-      </figure>
     </div>
   </div>
 </section>
@@ -469,7 +355,7 @@
       </details>
       <details class="faq">
         <summary>What DNS records do you support?</summary>
-        <p>A, AAAA, CNAME, TXT, MX and NS records are supported. You have full control to point your subdomain to any host or email provider.</p>
+        <p>A, AAAA, CNAME, TXT, MX and NS records are supported. Once your claim is verified, you can add and edit records yourself from your dashboard.</p>
       </details>
       <details class="faq">
         <summary>What if I don't want to use Google / Facebook / GitHub?</summary>
@@ -547,6 +433,11 @@
   </div>
 </footer>
 
+<script>
+  // SSR-rendered initial stats — passed to home.js so it can seed the prev
+  // counters and only animate genuine changes on subsequent refreshes.
+  window.__INITIAL_STATS__ = <?= json_encode($_initialStats) ?>;
+</script>
 <script src="/assets/js/app.js"></script>
 <script src="/assets/js/home.js"></script>
 </body>

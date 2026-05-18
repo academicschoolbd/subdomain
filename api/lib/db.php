@@ -168,6 +168,38 @@ function db_init_schema(array $CONFIG): void
             svalue $text NULL,
             updated_at $now
         )$charset",
+        // v3.2 — owner-managed DNS records for verified subdomains.
+        // Each row is a single DNS record (A / AAAA / CNAME / TXT / MX / NS).
+        // Admins CRUD freely; owners CRUD only their own institution's records.
+        "CREATE TABLE IF NOT EXISTS dns_records (
+            id $pk,
+            institution_id INTEGER NOT NULL,
+            type VARCHAR(8)   NOT NULL,
+            name VARCHAR(120) NOT NULL,
+            content VARCHAR(512) NOT NULL,
+            ttl INTEGER       NOT NULL DEFAULT 1,
+            priority INTEGER  NULL,
+            proxied $bool,
+            cf_record_id VARCHAR(64) NULL,
+            cf_status VARCHAR(16) NULL,
+            cf_message $text NULL,
+            created_at $now,
+            updated_at $now
+        )$charset",
+        // v3.2 — admin-managed "Support the developer" payment methods.
+        // Surface on /dashboard.php → Support Developer pane.
+        "CREATE TABLE IF NOT EXISTS support_payments (
+            id $pk,
+            method VARCHAR(40)  NOT NULL,
+            label  VARCHAR(120) NOT NULL,
+            number VARCHAR(120) NULL,
+            note   $text NULL,
+            qr_url VARCHAR(512) NULL,
+            sort_order INTEGER  NOT NULL DEFAULT 0,
+            visible $bool,
+            created_at $now,
+            updated_at $now
+        )$charset",
     ];
     foreach ($stmts as $sql) {
         $pdo->exec($sql);
@@ -187,6 +219,8 @@ function db_init_schema(array $CONFIG): void
         "CREATE INDEX IF NOT EXISTS idx_pwreset_token ON password_resets(token_hash)",
         "CREATE INDEX IF NOT EXISTS idx_throttle_ident ON login_throttle(ident, created_at)",
         "CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_dns_records_inst ON dns_records(institution_id)",
+        "CREATE INDEX IF NOT EXISTS idx_support_pay_visible ON support_payments(visible, sort_order)",
     ];
     foreach ($idx as $sql) {
         try { $pdo->exec($sql); } catch (PDOException $e) { /* mysql older versions */ }
@@ -432,6 +466,36 @@ function audit(array $CONFIG, ?int $actorId, ?int $instId, string $action, ?stri
     db($CONFIG)->prepare(
         'INSERT INTO audit_log (actor_user_id, institution_id, action, detail, created_at) VALUES (?,?,?,?,?)'
     )->execute([$actorId, $instId, $action, $detail, db_now($CONFIG)]);
+}
+
+/**
+ * v3.2 — seed default "Support Developer" payment methods. Idempotent: only
+ * runs when the table is empty, and admins can edit / hide / add more later
+ * from the admin console.
+ */
+function db_seed_support_payments_if_empty(array $CONFIG): void
+{
+    $pdo = db($CONFIG);
+    $mysql = db_is_mysql($CONFIG);
+    $ignore = db_insert_ignore($mysql);
+    try {
+        $count = (int)$pdo->query('SELECT COUNT(*) c FROM support_payments')->fetch()['c'];
+    } catch (PDOException $e) { return; }
+    if ($count > 0) return;
+    $now = db_now($CONFIG);
+    $defaults = [
+        ['bkash',  'bKash (Personal)', '01700000000',  'Send to this number using "Send Money".', null, 10, 1],
+        ['nagad',  'Nagad (Personal)', '01700000000',  'Send via the Nagad app — Send Money.',     null, 20, 1],
+        ['rocket', 'Rocket',           '01700000000-0','Send Money via the Rocket / DBBL app.',     null, 30, 0],
+    ];
+    $ins = $pdo->prepare(
+        "$ignore support_payments
+            (method, label, number, note, qr_url, sort_order, visible, created_at, updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?)"
+    );
+    foreach ($defaults as $d) {
+        $ins->execute([$d[0], $d[1], $d[2], $d[3], $d[4], $d[5], $d[6], $now, $now]);
+    }
 }
 
 /* =================================================================== */

@@ -30,6 +30,7 @@ ini_set('log_errors', '1');
 // Bootstrap schema + seed on first run.
 db_init_schema($CONFIG);
 db_seed_if_empty($CONFIG);
+db_seed_support_payments_if_empty($CONFIG);
 
 // v3.1 — overlay any admin-edited integration values on top of config.php so
 // the rest of the request reads the merged settings transparently.
