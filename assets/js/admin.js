@@ -154,6 +154,7 @@
         if (name === 'audit')    loadAudit();
         if (name === 'exports')  wireExports();
         if (name === 'settings') loadSettings();
+        if (name === 'integrations') loadIntegrations();
       });
     });
   }
@@ -296,6 +297,290 @@
           loadReserved();
         });
       });
+    });
+  }
+
+  /* ---------- v3.1: Integrations (OAuth, Cloudflare, WhatsApp, JWT, branding) ---------- */
+  function loadIntegrations() {
+    const host = document.querySelector('[data-integrations-host]');
+    if (!host) return;
+    host.innerHTML = '<div class="card mt-3"><div class="skeleton" style="height:160px;"></div></div>';
+    App.api('/admin/integrations').then((r) => {
+      renderIntegrations(host, r);
+    }).catch((e) => {
+      host.innerHTML = '<p class="text-danger">' + App.escapeHtml(e.detail || 'Load failed') + '</p>';
+    });
+  }
+
+  function renderIntegrations(host, r) {
+    const v = r.values || {};
+    const redirects = r.redirects || {};
+    const cfStatus = r.cloudflare_status || {};
+    const val = (k) => (v[k] && v[k].value) || '';
+    const isSet = (k) => !!(v[k] && v[k].is_set);
+    const masked = (k) => !!(v[k] && v[k].masked);
+    const placeholder = (k) => masked(k) && isSet(k) ? val(k) : '';
+
+    // Render a single field. type=text|password|textarea|checkbox.
+    function fld(key, label, opts) {
+      opts = opts || {};
+      const t = opts.type || 'text';
+      const ph = opts.placeholder || '';
+      const help = opts.help || '';
+      const present = isSet(key);
+      const id = 'int-' + key.replace(/\./g, '-');
+      const statusPill = present
+        ? '<span class="badge badge--verified" style="margin-left:6px;">saved</span>'
+        : '<span class="badge badge--muted" style="margin-left:6px;">not set</span>';
+      let inputHtml = '';
+      if (t === 'textarea') {
+        inputHtml = `<textarea id="${id}" name="${App.escapeHtml(key)}" rows="2" placeholder="${App.escapeHtml(ph)}">${App.escapeHtml(val(key))}</textarea>`;
+      } else if (t === 'checkbox') {
+        const checked = ['1','true','yes','on'].includes(String(val(key)).toLowerCase()) ? 'checked' : '';
+        inputHtml = `<label class="toggle-row" style="padding:6px 0;border:none;">
+          <input type="checkbox" id="${id}" name="${App.escapeHtml(key)}" ${checked} />
+          <span><strong>${App.escapeHtml(label)}</strong>${help ? '<span class="text-muted"> — ' + App.escapeHtml(help) + '</span>' : ''}</span>
+        </label>`;
+        return `<div class="field field--wide">${inputHtml}</div>`;
+      } else {
+        // password fields render the masked stored value as the placeholder
+        // and submit empty by default (= "leave alone").
+        const isSecret = masked(key);
+        const inputType = isSecret ? 'password' : t;
+        const inputPh = isSecret ? (present ? placeholder(key) : (ph || 'paste secret here')) : ph;
+        const inputVal = isSecret ? '' : val(key);
+        inputHtml = `<input id="${id}" name="${App.escapeHtml(key)}" type="${inputType}"
+          placeholder="${App.escapeHtml(inputPh)}"
+          value="${App.escapeHtml(inputVal)}"
+          autocomplete="off" spellcheck="false" />`;
+      }
+      return `
+        <div class="field${opts.wide ? ' field--wide' : ''}">
+          <label class="label" for="${id}">${App.escapeHtml(label)} ${statusPill}</label>
+          ${inputHtml}
+          ${help ? `<p class="hint">${App.escapeHtml(help)}</p>` : ''}
+        </div>`;
+    }
+
+    function copyBtn(text) {
+      return `<button type="button" class="btn btn--sm" data-copy="${App.escapeHtml(text)}">Copy</button>`;
+    }
+
+    const cfBrandsHtml = Object.keys(cfStatus).map((b) => {
+      const ok = !!cfStatus[b];
+      return `<span class="badge ${ok ? 'badge--verified' : 'badge--muted'}" style="margin-right:6px;">
+        <code>${App.escapeHtml(b)}</code> ${ok ? 'configured' : 'not configured'}
+      </span>`;
+    }).join('');
+
+    host.innerHTML = `
+      <div class="card mt-3">
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="margin:0;">Integrations</h3>
+            <p class="text-muted" style="margin:.2em 0;">Edit every secret, API key and external service from here. Saved values overlay <code>api/config.php</code> on the next request.</p>
+          </div>
+          <span class="badge">v3.1</span>
+        </div>
+
+        <form data-integrations-form class="mt-3">
+
+          <!-- Branding ---------------------------------------------------- -->
+          <details class="card" open style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">Branding & site URL</summary>
+            <div class="form-grid mt-3">
+              ${fld('site.url', 'Public site URL', { placeholder: 'https://institution.bd', help: 'Used to build OAuth redirect URIs and absolute links. No trailing slash.' })}
+              ${fld('brand.name', 'Brand name', { placeholder: 'institution.bd' })}
+              ${fld('brand.tagline', 'Brand tagline', { placeholder: 'Free verified subdomains for Bangladeshi institutions', wide: true })}
+            </div>
+          </details>
+
+          <!-- OAuth ------------------------------------------------------- -->
+          <details class="card" style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">Social sign-in (OAuth)</summary>
+            <p class="text-muted mt-2" style="margin-top:8px;">Whitelist this redirect URI in each provider's developer console:</p>
+
+            ${oauthBlock('google',   'Google',   redirects.google,   v)}
+            ${oauthBlock('facebook', 'Facebook', redirects.facebook, v)}
+            ${oauthBlock('github',   'GitHub',   redirects.github,   v)}
+          </details>
+
+          <!-- Cloudflare -------------------------------------------------- -->
+          <details class="card" style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">Cloudflare auto-DNS</summary>
+            <div class="mt-2" style="margin:10px 0 14px;">${cfBrandsHtml}</div>
+            <div class="form-grid">
+              ${fld('cloudflare.api_token', 'API token', { placeholder: 'cf-token', help: 'Token must have Zone:DNS:Edit permission for the zones below.', wide: true })}
+              ${fld('cloudflare.zones.institution_bd', 'Zone ID — institution.bd', { placeholder: 'zone id from Cloudflare dashboard' })}
+              ${fld('cloudflare.zones.smartschool_bd', 'Zone ID — smartschool.bd', { placeholder: 'zone id from Cloudflare dashboard' })}
+              ${fld('cloudflare.target_type', 'Record type', { placeholder: 'A', help: 'A, AAAA or CNAME' })}
+              ${fld('cloudflare.target_value', 'Record value', { placeholder: 'e.g. 203.0.113.10  (or hostname for CNAME)' })}
+            </div>
+            <label class="toggle-row mt-3">
+              <input type="checkbox" name="cloudflare.proxied" ${['1','true','yes','on'].includes(String(val('cloudflare.proxied')).toLowerCase()) ? 'checked' : ''} />
+              <span><strong>Proxy through Cloudflare (orange cloud)</strong><span class="text-muted"> — gives every tenant Cloudflare's automatic SSL + cache.</span></span>
+            </label>
+            <div class="flex mt-3" style="gap:10px;flex-wrap:wrap;">
+              <button type="button" class="btn" data-test-cf>Test Cloudflare token</button>
+              <span data-test-cf-result class="text-muted"></span>
+            </div>
+          </details>
+
+          <!-- WhatsApp ---------------------------------------------------- -->
+          <details class="card" style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">WhatsApp support &amp; community</summary>
+            <div class="form-grid mt-3">
+              ${fld('whatsapp.support_number', 'Support number', { placeholder: '8801712345678', help: 'International form WITHOUT +, dashes or spaces.' })}
+              ${fld('whatsapp.support_prefilled_message', 'Prefilled message', { placeholder: 'Hi! I need help with institution.bd' })}
+              ${fld('whatsapp.community_url', 'Community invite URL', { placeholder: 'https://chat.whatsapp.com/…', wide: true })}
+              ${fld('whatsapp.community_title', 'Community card title', { placeholder: 'Join our WhatsApp community' })}
+              ${fld('whatsapp.community_subtitle', 'Community card subtitle', { placeholder: 'Get announcements, support and meet other admins.' })}
+            </div>
+          </details>
+
+          <!-- Auth / security --------------------------------------------- -->
+          <details class="card" style="margin:18px 0;padding:18px 20px;box-shadow:none;">
+            <summary style="cursor:pointer;font-weight:700;font-size:1.05rem;">Auth &amp; security</summary>
+            <div class="form-grid mt-3">
+              ${fld('jwt.secret', 'JWT signing secret', { placeholder: '64-char hex string', help: 'Rotating this signs everyone out (including you).', wide: true })}
+            </div>
+            <div class="flex mt-3" style="gap:10px;flex-wrap:wrap;">
+              <button type="button" class="btn btn--danger" data-rotate-jwt>Rotate JWT secret</button>
+              <span class="text-muted">Generates a fresh 64-byte hex secret server-side.</span>
+            </div>
+          </details>
+
+          <div class="text-right mt-4">
+            <button class="btn btn--primary" type="submit">Save all integrations</button>
+          </div>
+        </form>
+      </div>`;
+
+    wireIntegrationsForm(host);
+  }
+
+  function oauthBlock(id, label, redirectUri, v) {
+    const present = !!(v['oauth.' + id + '.client_id'] && v['oauth.' + id + '.client_id'].is_set);
+    return `
+      <div class="card" style="background:var(--c-bg);box-shadow:none;border-style:dashed;margin:14px 0;padding:16px 18px;">
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <h4 style="margin:0;">${App.escapeHtml(label)}
+            <span class="badge ${present ? 'badge--verified' : 'badge--muted'}" style="margin-left:6px;">
+              ${present ? 'enabled' : 'disabled'}
+            </span>
+          </h4>
+          <div class="flex" style="gap:6px;flex-wrap:wrap;">
+            <code style="font-size:.8rem;background:rgba(15,23,42,.06);padding:2px 8px;border-radius:6px;">${App.escapeHtml(redirectUri || '')}</code>
+            <button type="button" class="btn btn--sm" data-copy="${App.escapeHtml(redirectUri || '')}">Copy URI</button>
+          </div>
+        </div>
+        <div class="form-grid mt-3">
+          <div class="field">
+            <label class="label">Client ID</label>
+            <input type="text" name="oauth.${id}.client_id" value="${App.escapeHtml((v['oauth.' + id + '.client_id'] && v['oauth.' + id + '.client_id'].value) || '')}" placeholder="paste client id" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="label">Client secret</label>
+            <input type="password" name="oauth.${id}.client_secret" value=""
+                   placeholder="${App.escapeHtml((v['oauth.' + id + '.client_secret'] && v['oauth.' + id + '.client_secret'].is_set) ? (v['oauth.' + id + '.client_secret'].value || '••••••••') : 'paste client secret')}"
+                   autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function wireIntegrationsForm(host) {
+    // Copy buttons (redirect URIs).
+    host.querySelectorAll('[data-copy]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const text = b.getAttribute('data-copy') || '';
+        try {
+          await navigator.clipboard.writeText(text);
+          App.toast('Copied to clipboard', 'success');
+        } catch (e) {
+          // Fallback: select-and-copy via a temporary textarea.
+          const ta = document.createElement('textarea');
+          ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); App.toast('Copied', 'success'); }
+          catch { App.toast('Copy failed', 'error'); }
+          ta.remove();
+        }
+      });
+    });
+
+    // Cloudflare test.
+    const testBtn = host.querySelector('[data-test-cf]');
+    const testOut = host.querySelector('[data-test-cf-result]');
+    if (testBtn) {
+      testBtn.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        const orig = testBtn.textContent;
+        testBtn.textContent = 'Testing…';
+        testOut.textContent = '';
+        try {
+          const r = await App.api('/admin/integrations/test', { method: 'POST', body: { target: 'cloudflare' } });
+          if (r.ok) {
+            const zones = (r.zones || []).map((z) => z.name).join(', ');
+            testOut.innerHTML = '<span class="text-success">✓ ' + App.escapeHtml(r.message || 'OK')
+              + (zones ? ' — visible zones: <code>' + App.escapeHtml(zones) + '</code>' : '') + '</span>';
+            App.toast('Cloudflare token verified', 'success');
+          } else {
+            testOut.innerHTML = '<span class="text-danger">✗ ' + App.escapeHtml(r.message || 'Token rejected') + '</span>';
+            App.toast(r.message || 'Cloudflare rejected the token', 'error');
+          }
+        } catch (e) {
+          testOut.innerHTML = '<span class="text-danger">✗ ' + App.escapeHtml(e.detail || 'Test failed') + '</span>';
+        } finally {
+          testBtn.disabled = false;
+          testBtn.textContent = orig;
+        }
+      });
+    }
+
+    // Rotate JWT.
+    const rotateBtn = host.querySelector('[data-rotate-jwt]');
+    if (rotateBtn) {
+      rotateBtn.addEventListener('click', async () => {
+        if (!confirm('Rotate the JWT secret? This signs out EVERY user — including you. Continue?')) return;
+        try {
+          const r = await App.api('/admin/integrations/rotate-jwt', { method: 'POST' });
+          App.toast(r.message || 'JWT rotated', 'success');
+          // We're now signed out. Redirect to home so the user can log back in.
+          App.clearSession();
+          setTimeout(() => { location.href = '/'; }, 800);
+        } catch (e) {
+          App.toast(e.detail || 'Rotate failed', 'error');
+        }
+      });
+    }
+
+    // Submit.
+    const form = host.querySelector('[data-integrations-form]');
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const values = {};
+      fd.forEach((val, key) => { values[key] = val; });
+      // Pick up unchecked checkboxes (FormData omits them).
+      form.querySelectorAll('input[type=checkbox]').forEach((c) => {
+        if (!(c.name in values)) values[c.name] = '0';
+        else values[c.name] = '1';
+      });
+      const submit = form.querySelector('button[type=submit]');
+      submit.disabled = true;
+      const orig = submit.textContent;
+      submit.textContent = 'Saving…';
+      try {
+        await App.api('/admin/integrations', { method: 'POST', body: { values } });
+        App.toast('Integrations saved', 'success');
+        loadIntegrations();
+      } catch (e) {
+        App.toast(e.detail || 'Save failed', 'error');
+      } finally {
+        submit.disabled = false;
+        submit.textContent = orig;
+      }
     });
   }
 

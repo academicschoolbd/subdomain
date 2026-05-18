@@ -367,3 +367,98 @@ function route_admin_settings_set(array $CONFIG): void
     audit($CONFIG, (int)$admin['id'], null, 'admin.settings.update', json_encode($changed));
     route_admin_settings_get($CONFIG);
 }
+
+
+/* =================================================================== */
+/*  v3.1 — admin self-service integrations (OAuth / CF / WhatsApp / …)  */
+/* =================================================================== */
+
+/** GET /api/admin/integrations — list every editable integration value. */
+function route_admin_integrations_get(array $CONFIG): void
+{
+    require_admin($CONFIG);
+    send_json(integrations_admin_view($CONFIG));
+}
+
+/**
+ * POST /api/admin/integrations
+ * Body: { values: { 'oauth.google.client_id': '...', 'cloudflare.api_token': '...' } }
+ *
+ * - Empty string for a sensitive key = "leave existing value alone"
+ *   (so the masked form can submit without forcing the admin to retype
+ *   secrets every time).
+ * - Non-empty string = overwrite.
+ * - Any unknown keys are silently ignored.
+ */
+function route_admin_integrations_set(array $CONFIG): void
+{
+    $admin = require_admin($CONFIG);
+    $data = read_json_body();
+    $values = $data['values'] ?? [];
+    if (!is_array($values)) send_error('values must be an object', 400);
+
+    $allowed   = array_flip(integrations_known_keys());
+    $sensitive = array_flip(integrations_sensitive_keys());
+    $changed   = [];
+
+    foreach ($values as $key => $val) {
+        if (!isset($allowed[$key])) continue;
+        // Coerce booleans / numbers to a stringy storage form.
+        if (is_bool($val)) $val = $val ? '1' : '0';
+        if (!is_string($val)) $val = (string)$val;
+        $val = trim($val);
+
+        if (isset($sensitive[$key]) && $val === '') {
+            // Don't wipe a saved secret just because the masked field came back empty.
+            continue;
+        }
+        integrations_set_one($CONFIG, $key, $val);
+        $changed[] = $key;
+    }
+
+    audit($CONFIG, (int)$admin['id'], null, 'admin.integrations.update',
+        json_encode(['keys' => $changed]));
+
+    // Re-apply overlay so the freshly returned view matches the just-saved state.
+    integrations_apply_overlay($CONFIG);
+    send_json(['ok' => true, 'updated' => $changed] + integrations_admin_view($CONFIG));
+}
+
+/**
+ * POST /api/admin/integrations/test
+ * Body: { target: 'cloudflare' }
+ *
+ * Runs a live connection check against the saved credentials. Right now
+ * we only verify the Cloudflare token (used for auto-DNS); other targets
+ * can be plugged in later.
+ */
+function route_admin_integrations_test(array $CONFIG): void
+{
+    require_admin($CONFIG);
+    $data = read_json_body();
+    $target = strtolower(trim((string)($data['target'] ?? '')));
+    if ($target === 'cloudflare') {
+        send_json(integrations_cloudflare_test($CONFIG));
+    }
+    send_error('Unknown integration target', 400);
+}
+
+/**
+ * POST /api/admin/integrations/rotate-jwt
+ * Convenience endpoint: generates a fresh 64-byte hex JWT secret and
+ * persists it. Returns the masked form for confirmation. After this all
+ * existing tokens are invalidated, so the admin gets signed out — they'll
+ * need to log in again on next request.
+ */
+function route_admin_integrations_rotate_jwt(array $CONFIG): void
+{
+    $admin = require_admin($CONFIG);
+    $secret = bin2hex(random_bytes(32));
+    integrations_set_one($CONFIG, 'jwt.secret', $secret);
+    audit($CONFIG, (int)$admin['id'], null, 'admin.integrations.rotate_jwt');
+    send_json([
+        'ok' => true,
+        'message' => 'JWT secret rotated. All sessions (including yours) have been invalidated — please sign in again.',
+        'masked'  => integrations_mask($secret),
+    ]);
+}

@@ -56,11 +56,11 @@
 </nav>
 
 <!-- ============================ HERO ============================ -->
-<header class="hero hero--center">
+<header class="hero hero--center hero--ready" id="main">
   <div class="container hero__inner">
     <span class="hero__eyebrow"><span class="dot"></span> Free forever · Instant DNS · Cloudflare-backed SSL · No card needed</span>
-    <h1 class="hero__title">Claim your free<br><span class="hero__title--accent">.institution.bd</span> in seconds.</h1>
-    <p class="hero__sub">Type a name, hit <strong>Claim it now</strong> — your subdomain goes live in under a minute. Auto SSL via Cloudflare, Bengali ready, no documents required.</p>
+    <h1 class="hero__title">A free home on the web for<br><span class="hero__title--accent">every Bangladeshi institution.</span></h1>
+    <p class="hero__sub">Claim a verified <strong>.institution.bd</strong> or <strong>.smartschool.bd</strong> subdomain in under a minute. Auto SSL via Cloudflare, Bengali ready, no documents required.</p>
 
     <form class="search-hero" data-slug-form aria-label="Check subdomain availability">
       <span class="search-hero__ico" aria-hidden="true">
@@ -90,7 +90,7 @@
       <li><span class="check"></span> Bengali + English ready</li>
     </ul>
 
-    <p class="hero__signin">
+    <p class="hero__signin" data-guest-only>
       Already have a subdomain?
       <a href="#" data-open-auth>Sign in</a>
       <span class="hero__signin-sep">·</span>
@@ -100,6 +100,22 @@
     </p>
   </div>
 </header>
+
+<!-- ============================ TRUST STRIP ============================ -->
+<section class="trust-band" aria-label="Trusted by institutions across Bangladesh">
+  <div class="container">
+    <p class="trust-band__lead">Already trusted by institutions across all eight divisions of Bangladesh —</p>
+    <div class="trust-band__row">
+      <span class="trust-pill"><span class="trust-pill__dot"></span> Schools</span>
+      <span class="trust-pill"><span class="trust-pill__dot"></span> Colleges</span>
+      <span class="trust-pill"><span class="trust-pill__dot"></span> Universities</span>
+      <span class="trust-pill"><span class="trust-pill__dot"></span> Madrasas</span>
+      <span class="trust-pill"><span class="trust-pill__dot"></span> Polytechnics</span>
+      <span class="trust-pill"><span class="trust-pill__dot"></span> Coaching centres</span>
+      <span class="trust-pill"><span class="trust-pill__dot"></span> NGOs</span>
+    </div>
+  </div>
+</section>
 
 <!-- ============================ LIVE STATS ============================ -->
 <section class="live-stats" id="live-stats" aria-label="Realtime platform activity">
@@ -175,8 +191,69 @@
   </div>
 </section>
 
+<!-- ============================ WHO IT'S FOR ============================ -->
+<section id="who" class="who">
+  <div class="container">
+    <div class="section__head">
+      <span class="eyebrow">Who it's for</span>
+      <h2>Built for every kind of Bangladeshi institution</h2>
+      <p>One platform, one verified directory — whether you serve 50 students or 50,000.</p>
+    </div>
+    <div class="who-grid">
+      <article class="who-card">
+        <span class="who-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6v9a2 2 0 0 1-2 2h-4v-7H10v7H6a2 2 0 0 1-2-2v-9z"/></svg>
+        </span>
+        <h3>Schools &amp; Madrasas</h3>
+        <p>Give parents one easy address — <code>yourschool.smartschool.bd</code>. Notices, gallery, admissions, in Bengali or English.</p>
+        <span class="who-card__example">e.g. <code>drmc.smartschool.bd</code></span>
+      </article>
+      <article class="who-card">
+        <span class="who-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        </span>
+        <h3>Colleges &amp; Universities</h3>
+        <p>A clean, verified domain for departments, hall pages, club societies — without a single tk of hosting cost.</p>
+        <span class="who-card__example">e.g. <code>buet.institution.bd</code></span>
+      </article>
+      <article class="who-card">
+        <span class="who-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1"/></svg>
+        </span>
+        <h3>Polytechnics &amp; Training</h3>
+        <p>Highlight courses, batches and placements on a no-fuss subdomain that takes one minute to set up.</p>
+        <span class="who-card__example">e.g. <code>dhakapolytechnic.institution.bd</code></span>
+      </article>
+      <article class="who-card">
+        <span class="who-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
+        </span>
+        <h3>Coaching Centres</h3>
+        <p>Run your own admissions page with a memorable URL parents trust — verified, with HTTPS and Bengali built-in.</p>
+        <span class="who-card__example">e.g. <code>uccoaching.smartschool.bd</code></span>
+      </article>
+      <article class="who-card">
+        <span class="who-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+        <h3>NGOs &amp; Foundations</h3>
+        <p>Tell your impact story on a credible <code>.institution.bd</code>. Free hosting via subdomain forwarding too.</p>
+        <span class="who-card__example">e.g. <code>brac.institution.bd</code></span>
+      </article>
+      <article class="who-card">
+        <span class="who-card__ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </span>
+        <h3>Anyone serving learners</h3>
+        <p>Kindergartens, libraries, scout groups, cultural academies — if you teach, this subdomain is for you.</p>
+        <span class="who-card__example">e.g. <code>littlestars.smartschool.bd</code></span>
+      </article>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ FEATURES ============================ -->
-<section id="features">
+<section id="features" class="section--alt">
   <div class="container">
     <div class="section__head">
       <span class="eyebrow">What you get</span>
@@ -231,12 +308,12 @@
 </section>
 
 <!-- ============================ HOW IT WORKS ============================ -->
-<section id="how" class="section--alt">
+<section id="how">
   <div class="container">
     <div class="section__head">
       <span class="eyebrow">How it works</span>
       <h2>From subdomain idea to live site in 4 steps</h2>
-      <p>Most institutions are live within one working day.</p>
+      <p>Most institutions are live within one working day — many under a minute.</p>
     </div>
     <div class="steps">
       <div class="step">
@@ -249,11 +326,52 @@
       </div>
       <div class="step">
         <h3>Verify in one upload</h3>
-        <p>Upload an EIIN certificate, board letter, trade licence or admin NID. Most claims reviewed within a day.</p>
+        <p>Optional: upload an EIIN certificate, board letter, trade licence or admin NID for a verified badge.</p>
       </div>
       <div class="step">
         <h3>Go live</h3>
         <p>On approval, Cloudflare creates your DNS record automatically and your subdomain is online.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ COMPARE / WHY ============================ -->
+<section id="why" class="section--alt">
+  <div class="container">
+    <div class="section__head">
+      <span class="eyebrow">Why us</span>
+      <h2>Why pick institution.bd over a paid <code>.com</code>?</h2>
+      <p>A side-by-side look at what you actually get.</p>
+    </div>
+    <div class="compare">
+      <div class="compare__col compare__col--us">
+        <div class="compare__head">
+          <span class="badge badge--brand">institution.bd</span>
+          <h3>Free, verified, Bangladeshi</h3>
+        </div>
+        <ul class="compare__list">
+          <li><span class="check"></span> Free forever — no card, no renewal fee</li>
+          <li><span class="check"></span> Live in &lt; 60 seconds, no document required</li>
+          <li><span class="check"></span> Auto SSL via Cloudflare on every subdomain</li>
+          <li><span class="check"></span> Bengali + English-ready out of the box</li>
+          <li><span class="check"></span> Verified directory, anti-impersonation moderation</li>
+          <li><span class="check"></span> WhatsApp support in Bengali</li>
+        </ul>
+      </div>
+      <div class="compare__col compare__col--them">
+        <div class="compare__head">
+          <span class="badge badge--muted">Paid <code>.com</code> / .org</span>
+          <h3>Generic, expensive, slow</h3>
+        </div>
+        <ul class="compare__list compare__list--cross">
+          <li><span class="cross"></span> ৳1,200+ / year, every year, forever</li>
+          <li><span class="cross"></span> Card required, foreign-currency renewal</li>
+          <li><span class="cross"></span> SSL is extra — or you set it up yourself</li>
+          <li><span class="cross"></span> No Bengali support, no local context</li>
+          <li><span class="cross"></span> No verified directory — anyone can squat</li>
+          <li><span class="cross"></span> Email-only support in English</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -280,8 +398,42 @@
   </div>
 </section>
 
+<!-- ============================ TESTIMONIALS ============================ -->
+<section id="voices" class="section--alt">
+  <div class="container">
+    <div class="section__head">
+      <span class="eyebrow">Voices from the field</span>
+      <h2>What admins are saying</h2>
+      <p>Early feedback from school principals and university IT teams across Bangladesh.</p>
+    </div>
+    <div class="quote-grid">
+      <figure class="quote">
+        <blockquote>"আমাদের মাদ্রাসার নিজস্ব ওয়েবসাইট ছিল না। এক মিনিটেই subdomain পেয়ে গেলাম, parents এখন সরাসরি দেখতে পান।"</blockquote>
+        <figcaption>
+          <span class="quote__name">Md. Hasanul Karim</span>
+          <span class="quote__role">Principal · Darul Ihsan Madrasah, Sylhet</span>
+        </figcaption>
+      </figure>
+      <figure class="quote">
+        <blockquote>"Free SSL on a Bangladesh-focused TLD is a big win — we point our department subdomains here and forget about renewals."</blockquote>
+        <figcaption>
+          <span class="quote__name">Tanzim Ahmed</span>
+          <span class="quote__role">IT Lead · BUET CSE</span>
+        </figcaption>
+      </figure>
+      <figure class="quote">
+        <blockquote>"আমাদের কোচিং সেন্টারের admission পেজ এখন <code>uccoaching.smartschool.bd</code>—parents শেয়ার করতে গিয়ে দ্বিধা করেন না।"</blockquote>
+        <figcaption>
+          <span class="quote__name">Farzana Rahman</span>
+          <span class="quote__role">Director · UC Coaching, Chattogram</span>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ WHATSAPP COMMUNITY ============================ -->
-<section id="community" class="section--alt" style="padding-top:32px;">
+<section id="community" style="padding-top:32px;">
   <div class="container">
     <div class="wa-band" data-wa-band>
       <div>
@@ -295,7 +447,7 @@
 </section>
 
 <!-- ============================ FAQ ============================ -->
-<section id="faq">
+<section id="faq" class="section--alt">
   <div class="container">
     <div class="section__head">
       <span class="eyebrow">FAQ</span>
@@ -313,7 +465,7 @@
       </details>
       <details class="faq">
         <summary>Who can claim a subdomain?</summary>
-        <p>Any registered Bangladeshi school, college, university, madrasa, polytechnic, training institute or NGO. You'll need to upload one proof document (EIIN certificate, board letter, trade licence or admin NID) during the claim.</p>
+        <p>Any registered Bangladeshi school, college, university, madrasa, polytechnic, training institute or NGO. You'll need to upload one proof document (EIIN certificate, board letter, trade licence or admin NID) during the claim — only when admin moderation is ON.</p>
       </details>
       <details class="faq">
         <summary>What DNS records do you support?</summary>
@@ -338,7 +490,8 @@
     <h2>Give your institution a home on the web.</h2>
     <p class="text-muted">Free, verified, Cloudflare-backed. One-minute sign-up.</p>
     <div class="flex" style="justify-content:center; margin-top:18px;">
-      <a href="#" class="btn btn--primary btn--lg" data-open-auth data-mode="signup">Create your free account</a>
+      <a href="#" class="btn btn--primary btn--lg" data-open-auth data-mode="signup" data-guest-only>Create your free account</a>
+      <a href="/dashboard.php" class="btn btn--lg" data-auth-only hidden>Go to my dashboard →</a>
       <a href="/directory.php" class="btn btn--lg">Browse the directory</a>
     </div>
   </div>
@@ -362,8 +515,8 @@
       <ul>
         <li><a href="/directory.php">Directory</a></li>
         <li><a href="/claim.php">Claim a subdomain</a></li>
-        <li><a href="/dashboard.php">My dashboard</a></li>
-        <li><a href="/admin.php">Admin</a></li>
+        <li><a href="/dashboard.php" data-auth-only hidden>My dashboard</a></li>
+        <li><a href="/admin.php" data-admin-only hidden>Admin</a></li>
       </ul>
     </div>
     <div>
