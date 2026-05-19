@@ -791,6 +791,27 @@
 
       <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-telegram me-2"></i>Telegram Notifications</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              ${secretField('int_tg_token', 'Bot Token', v, 'telegram.bot_token', 'Your Telegram bot token')}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Chat ID</label>
+              <input type="text" class="form-control form-control-sm" id="int_tg_chat_id" value="${App.escapeHtml(intVal(v, 'telegram.chat_id'))}" placeholder="-1001234567890">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button class="btn btn-outline-primary btn-sm w-100" data-tg-test><i class="bi bi-send me-1"></i>Test</button>
+            </div>
+          </div>
+          <div class="mt-2" data-tg-test-result></div>
+          <small class="text-muted d-block mt-2">Create a bot via <a href="https://t.me/BotFather" target="_blank">@BotFather</a>, add it to your group, then get the chat ID.</small>
+        </div>
+      </div>
+
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
           <h6 class="fw-semibold mb-3"><i class="bi bi-envelope me-2"></i>Email / SMTP</h6>
           <div class="row g-3">
             <div class="col-md-3">
@@ -871,6 +892,25 @@
     });
 
 
+    // Wire Telegram test
+    host.querySelector('[data-tg-test]')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const result = host.querySelector('[data-tg-test-result]');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      try {
+        const r = await App.api('/admin/integrations/test', { method: 'POST', body: { target: 'telegram' } });
+        if (r.ok) {
+          result.innerHTML = `<div class="alert alert-success small py-2 mb-0"><i class="bi bi-check-circle me-1"></i>${App.escapeHtml(r.message)}</div>`;
+        } else {
+          result.innerHTML = `<div class="alert alert-danger small py-2 mb-0"><i class="bi bi-x-circle me-1"></i>${App.escapeHtml(r.message)}</div>`;
+        }
+      } catch (err) {
+        result.innerHTML = `<div class="alert alert-danger small py-2 mb-0">${App.escapeHtml(err?.detail || 'Test failed')}</div>`;
+      }
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-send me-1"></i>Test';
+    });
+
+
     // Wire rotate JWT
     host.querySelector('[data-rotate-jwt]')?.addEventListener('click', async () => {
       if (!confirm('Rotate JWT secret? All sessions (including yours) will be invalidated.')) return;
@@ -914,6 +954,8 @@
         'mail.smtp_user': host.querySelector('#int_smtp_user').value.trim(),
         'mail.smtp_pass': host.querySelector('#int_smtp_pass').value.trim(),
         'jwt.secret': host.querySelector('#int_jwt_secret').value.trim(),
+        'telegram.bot_token': host.querySelector('#int_tg_token').value.trim(),
+        'telegram.chat_id': host.querySelector('#int_tg_chat_id').value.trim(),
       };
 
       try {

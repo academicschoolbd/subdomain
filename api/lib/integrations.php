@@ -66,6 +66,10 @@ function integrations_known_keys(): array
 
         // Auth / security
         'jwt.secret',
+
+        // Telegram
+        'telegram.bot_token',
+        'telegram.chat_id',
     ];
 }
 
@@ -79,6 +83,7 @@ function integrations_sensitive_keys(): array
         'cloudflare.api_token',
         'mail.smtp_pass',
         'jwt.secret',
+        'telegram.bot_token',
     ];
 }
 
@@ -225,6 +230,10 @@ function integrations_apply_overlay(array &$CONFIG): void
             case 'jwt.secret':
                 if ($val !== '') $set('jwt_secret', $val);
                 break;
+
+            // -- Telegram --
+            case 'telegram.bot_token': $set('telegram.bot_token', $val); break;
+            case 'telegram.chat_id':   $set('telegram.chat_id', $val); break;
         }
     }
 }
@@ -318,6 +327,8 @@ function integrations_config_lookup(array $CONFIG, string $key)
         'mail.smtp_pass'                        => ['mail','smtp_pass'],
         'mail.smtp_secure'                      => ['mail','smtp_secure'],
         'jwt.secret'                            => ['jwt_secret'],
+        'telegram.bot_token'                    => ['telegram','bot_token'],
+        'telegram.chat_id'                      => ['telegram','chat_id'],
     ];
     if (!isset($map[$key])) return '';
     $cur = $CONFIG;

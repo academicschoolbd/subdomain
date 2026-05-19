@@ -23,6 +23,7 @@ require_once $root . '/lib/cloudflare.php';
 require_once $root . '/lib/integrations.php';
 require_once $root . '/lib/mail.php';
 require_once $root . '/lib/theme.php';
+require_once $root . '/lib/telegram.php';
 
 date_default_timezone_set('Asia/Dhaka');
 error_reporting(E_ALL);

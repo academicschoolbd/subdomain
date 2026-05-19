@@ -201,6 +201,22 @@ function route_claim_submit(array $CONFIG): void
         audit($CONFIG, (int)$u['id'], $instId, 'claim.auto_dns.' . $dnsStatus, $cf['message']);
     }
 
+    // Telegram notification (best-effort, never blocks response)
+    try {
+        $tg = $CONFIG['telegram'] ?? [];
+        if (!empty($tg['bot_token']) && !empty($tg['chat_id'])) {
+            telegram_notify_new_claim($CONFIG, [
+                'slug' => $slug,
+                'brand' => $brand,
+                'name_en' => $name_en,
+                'category' => $category,
+                'contact_name' => $contact_name,
+                'contact_phone' => $contact_phone,
+                'contact_email' => $contact_email,
+            ]);
+        }
+    } catch (\Throwable $e) { /* never block claim */ }
+
     $stmt = $pdo->prepare('SELECT * FROM institutions WHERE id = ?');
     $stmt->execute([$instId]);
     send_json(['ok' => true, 'claim' => _claim_row($stmt->fetch()), 'auto_verified' => !$requireApproval]);

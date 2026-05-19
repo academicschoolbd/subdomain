@@ -520,6 +520,9 @@ function route_admin_integrations_test(array $CONFIG): void
     $target = strtolower(trim((string)($data['target'] ?? '')));
     if ($target === 'cloudflare') {
         send_json(integrations_cloudflare_test($CONFIG));
+    } elseif ($target === 'telegram') {
+        $result = telegram_test($CONFIG);
+        send_json($result);
     }
     send_error('Unknown integration target', 400);
 }
