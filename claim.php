@@ -119,11 +119,26 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
     <!-- Step 3: Success -->
     <div class="card border-0 shadow-sm mt-3 text-center p-5" data-step="3" hidden>
       <i class="bi bi-check-circle-fill text-success fs-1 mb-3 d-block"></i>
-      <h4>Claim submitted successfully!</h4>
+      <h4>Congratulations! Claim submitted!</h4>
       <p class="text-muted">Your subdomain request has been sent to the admin for review. You'll be notified once it's approved.</p>
       <div class="d-flex gap-2 justify-content-center mt-3">
         <a href="/dashboard.php" class="btn btn-primary"><i class="bi bi-speedometer2 me-1"></i> Go to Dashboard</a>
         <a href="/directory.php" class="btn btn-outline-secondary"><i class="bi bi-grid me-1"></i> Browse Directory</a>
+      </div>
+    </div>
+
+    <!-- WhatsApp Community Card (shown after success) -->
+    <div class="card border-0 shadow mt-3" data-step-wa hidden style="background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);">
+      <div class="card-body p-4 text-center text-white">
+        <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-white mb-3" style="width:56px;height:56px;">
+          <i class="bi bi-whatsapp fs-3" style="color:#25D366;"></i>
+        </div>
+        <h5 class="text-white mb-2">Join our WhatsApp community!</h5>
+        <p class="small mb-3" style="opacity:.9;">Get claim status updates, platform announcements, meet other institution owners, and get instant support.</p>
+        <a href="#" class="btn btn-light btn-lg fw-semibold" data-wa-join-link target="_blank" rel="noopener">
+          <i class="bi bi-whatsapp me-2"></i> Join WhatsApp Group
+        </a>
+        <p class="mt-2 mb-0 small" style="opacity:.7;">Free to join, completely opt-in</p>
       </div>
     </div>
   </div>

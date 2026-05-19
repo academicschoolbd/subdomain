@@ -324,11 +324,14 @@
 
       // Show success
       if (r.auto_verified) {
-        App.toast(`${_selectedSlug}.${_selectedBrand} is now LIVE!`, 'success');
+        App.toast(`Congratulations! ${_selectedSlug}.${_selectedBrand} is now LIVE!`, 'success');
       } else {
-        App.toast('Claim submitted for admin review!', 'success');
+        App.toast('Congratulations! Claim submitted for admin review!', 'success');
       }
       showStep(3);
+
+      // Show WhatsApp community card
+      showWhatsAppCard();
     } catch (e) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = '<i class="bi bi-send me-1"></i> Submit Claim to Admin';
@@ -342,6 +345,27 @@
       } else {
         App.toast(e?.detail || 'Submission failed — please try again.', 'error');
       }
+    }
+  }
+
+  // ─── WhatsApp Community Card (shown after success) ────────────────────────
+
+  async function showWhatsAppCard() {
+    const waCard = document.querySelector('[data-step-wa]');
+    if (!waCard) return;
+
+    try {
+      const s = await App.getSettings();
+      const wa = s?.whatsapp || {};
+      const url = wa.community_url || wa.support_url || '';
+
+      if (url) {
+        const joinLink = waCard.querySelector('[data-wa-join-link]');
+        if (joinLink) joinLink.href = url;
+        waCard.hidden = false;
+      }
+    } catch {
+      // No WhatsApp link configured — card stays hidden
     }
   }
 
