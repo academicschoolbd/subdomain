@@ -83,10 +83,39 @@ function telegram_test(array $CONFIG): array
     $token = trim((string)($tg['bot_token'] ?? ''));
     $chatId = trim((string)($tg['chat_id'] ?? ''));
     if ($token === '' || $chatId === '') {
-        return ['ok' => false, 'message' => 'Telegram bot_token or chat_id not configured.'];
+        return ['ok' => false, 'message' => 'Telegram bot_token or chat_id not configured. Please enter both values and save before testing.'];
     }
-    $ok = telegram_send_message($CONFIG, "Telegram integration is working!\n\nSent from institution.bd admin panel.");
-    return $ok
-        ? ['ok' => true, 'message' => 'Test message sent successfully!']
-        : ['ok' => false, 'message' => 'Failed to send message. Check your bot token and chat ID.'];
+
+    $url = "https://api.telegram.org/bot{$token}/sendMessage";
+    $payload = [
+        'chat_id' => $chatId,
+        'text' => "Telegram integration is working!\n\nSent from institution.bd admin panel.",
+        'disable_web_page_preview' => true,
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($payload),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+    ]);
+    $resp = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($resp === false) {
+        return ['ok' => false, 'message' => 'Connection failed: ' . ($curlError ?: 'Unknown cURL error')];
+    }
+
+    $body = json_decode($resp, true);
+    if ($httpCode >= 200 && $httpCode < 300 && ($body['ok'] ?? false)) {
+        return ['ok' => true, 'message' => 'Test message sent successfully!'];
+    }
+
+    $tgError = $body['description'] ?? 'Unknown error';
+    return ['ok' => false, 'message' => "Telegram API error ({$httpCode}): {$tgError}"];
 }

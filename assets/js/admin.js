@@ -858,7 +858,12 @@
               ${secretField('int_tg_token', 'Bot Token', v, 'telegram.bot_token', 'Your Telegram bot token')}
             </div>
             <div class="col-12 col-md-4">
-              ${secretField('int_tg_chat_id', 'Chat ID', v, 'telegram.chat_id', '-1001234567890')}
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Chat ID</label>
+                <input type="text" class="form-control form-control-sm" id="int_tg_chat_id"
+                  value="${App.escapeHtml(intVal(v, 'telegram.chat_id'))}" placeholder="-1001234567890">
+                <small class="text-muted">Group/channel chat ID (usually starts with -100)</small>
+              </div>
             </div>
             <div class="col-12 col-md-2 d-flex align-items-end">
               <button class="btn btn-outline-primary btn-sm w-100" data-tg-test><i class="bi bi-send me-1"></i>Test</button>
@@ -958,6 +963,15 @@
       const result = host.querySelector('[data-tg-test-result]');
       btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
       try {
+        // Auto-save telegram fields before testing
+        const tgToken = (host.querySelector('#int_tg_token').value || '').trim();
+        const tgChatId = (host.querySelector('#int_tg_chat_id').value || '').trim();
+        if (tgToken || tgChatId) {
+          const saveValues = {};
+          if (tgToken) saveValues['telegram.bot_token'] = tgToken;
+          if (tgChatId) saveValues['telegram.chat_id'] = tgChatId;
+          await App.api('/admin/integrations', { method: 'POST', body: { values: saveValues } });
+        }
         const r = await App.api('/admin/integrations/test', { method: 'POST', body: { target: 'telegram' } });
         if (r.ok) {
           result.innerHTML = `<div class="alert alert-success small py-2 mb-0"><i class="bi bi-check-circle me-1"></i>${App.escapeHtml(r.message)}</div>`;
