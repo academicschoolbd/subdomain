@@ -36,6 +36,7 @@ RewriteRule ^institution/?$  institution.php  [L]
 RewriteRule ^privacy/?$      privacy.php      [L]
 RewriteRule ^terms/?$        terms.php        [L]
 RewriteRule ^reset-password/?$ reset-password.php [L]
+RewriteRule ^profile-complete/?$ profile-complete.php [L]
 RewriteRule ^sitemap\.xml$   sitemap.xml.php  [L]
 
 # Single institution page: /i/<brand>/<slug> -> institution.php?brand=&slug=

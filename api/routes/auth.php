@@ -406,68 +406,160 @@ function route_auth_change_password(array $CONFIG): void
 }
 
 /**
- * PATCH /api/auth/profile  —  save the "tell us about yourself" fields the
- * user is required to complete before claiming a subdomain.
+ * PATCH /api/auth/profile  —  update one or more profile fields.
  *
- * Body (all required to mark the profile complete):
- *   name, mobile, designation_bn, institution_name, division, district, upazila
+ * The v5pro completion gate is narrow: only `name`, `mobile`, and
+ * `date_of_birth` must be set before a user can claim a subdomain. The
+ * remaining fields (designation_bn, institution_name, division, district,
+ * upazila) are still accepted whenever supplied — the legacy 7-field editor
+ * on /profile.php sends them, and the claim wizard step 2 re-collects the
+ * institution-side fields per claim. Validation is conditional:
+ *
+ *   - name / mobile / date_of_birth — validated whenever the field is in the
+ *     request body OR is currently empty in the DB row. This enforces the
+ *     gate triplet before stamping completion. A request that omits these
+ *     keys (e.g. only updating designation_bn) does NOT have to re-send them.
+ *   - designation_bn / institution_name / division / district / upazila —
+ *     validated only when present and non-empty, so the new 3-field form
+ *     does not need to send them.
+ *
+ * The `profile_completed_at` column is stamped exactly once: when the gate
+ * triplet first becomes complete. A second PATCH never overwrites it.
  */
 function route_auth_profile_patch(array $CONFIG): void
 {
     $u = require_user($CONFIG);
     $data = read_json_body();
 
+    $has = static fn(array $d, string $k) => array_key_exists($k, $d);
     $get = static function (array $d, string $k): string {
         return trim((string)($d[$k] ?? ''));
     };
 
+    // ----- Read incoming values + the current row (for the conditional rules). -----
+    $current = $u; // already loaded by require_user / current_user
+
+    $hasName    = $has($data, 'name');
+    $hasMobile  = $has($data, 'mobile');
+    $hasDob     = $has($data, 'date_of_birth');
+    $hasDesg    = $has($data, 'designation_bn');
+    $hasInst    = $has($data, 'institution_name');
+    $hasDiv     = $has($data, 'division');
+    $hasDist    = $has($data, 'district');
+    $hasUpa     = $has($data, 'upazila');
+
     $name             = $get($data, 'name');
     $mobile           = $get($data, 'mobile');
+    $dob              = $get($data, 'date_of_birth');
     $designation_bn   = $get($data, 'designation_bn');
     $institution_name = $get($data, 'institution_name');
     $division         = $get($data, 'division');
     $district         = $get($data, 'district');
     $upazila          = $get($data, 'upazila');
 
-    // Validation: mobile must look like a BD number; everything else just non-empty.
+    $curName   = trim((string)($current['name'] ?? ''));
+    $curMobile = trim((string)($current['mobile'] ?? ''));
+    $curDob    = trim((string)($current['date_of_birth'] ?? ''));
+
     $errors = [];
-    if ($name === '')             $errors['name']             = 'Full name required';
-    if ($mobile === '')           $errors['mobile']           = 'Mobile number required';
-    elseif (!is_valid_bd_phone($mobile)) {
-        $errors['mobile'] = 'Enter a valid Bangladesh mobile (e.g. 01712345678)';
+
+    // -- Gate triplet: validate when the field is being changed OR is missing. --
+    if ($hasName || $curName === '') {
+        if ($name === '') {
+            $errors['name'] = 'Full name required';
+        } elseif (mb_strlen($name) > 120) {
+            $errors['name'] = 'Full name must be 120 characters or fewer';
+        }
     }
-    if ($designation_bn === '')   $errors['designation_bn']   = 'পদবি / Designation required';
-    if ($institution_name === '') $errors['institution_name'] = 'প্রতিষ্ঠানের নাম / Institution name required';
-    if ($division === '')         $errors['division']         = 'বিভাগ / Division required';
-    if ($district === '')         $errors['district']         = 'জেলা / District required';
-    if ($upazila === '')          $errors['upazila']          = 'উপজেলা / Upazila required';
+    if ($hasMobile || $curMobile === '') {
+        if ($mobile === '') {
+            $errors['mobile'] = 'Mobile number required';
+        } elseif (!is_valid_bd_phone($mobile)) {
+            $errors['mobile'] = 'Enter a valid Bangladesh mobile (e.g. 01712345678)';
+        }
+    }
+    if ($hasDob || $curDob === '') {
+        if ($dob === '') {
+            $errors['date_of_birth'] = 'Date of birth required';
+        } elseif (!is_valid_dob($dob)) {
+            $errors['date_of_birth'] = 'Enter a valid date of birth (YYYY-MM-DD, age 5 or above, not in the future)';
+        }
+    }
+
+    // -- Optional fields: validate only when supplied AND non-empty. --
+    if ($hasDesg && $designation_bn !== '' && mb_strlen($designation_bn) > 120) {
+        $errors['designation_bn'] = 'পদবি / Designation must be 120 characters or fewer';
+    }
+    if ($hasInst && $institution_name !== '' && mb_strlen($institution_name) > 255) {
+        $errors['institution_name'] = 'প্রতিষ্ঠানের নাম / Institution name too long';
+    }
 
     if ($errors) {
         send_json(['ok' => false, 'errors' => $errors], 422);
     }
 
-    $mobileNorm = normalize_phone($mobile);
-    $pdo = db($CONFIG);
-    $pdo->prepare(
-        'UPDATE users SET
-            name = ?, mobile = ?, designation_bn = ?, institution_name = ?,
-            division = ?, district = ?, upazila = ?, profile_completed_at = ?
-         WHERE id = ?'
-    )->execute([
-        $name, $mobileNorm, $designation_bn, $institution_name,
-        $division, $district, $upazila, db_now($CONFIG), (int)$u['id'],
-    ]);
-    audit($CONFIG, (int)$u['id'], null, 'auth.profile.update');
+    // ----- Build the UPDATE column list dynamically. ----------------------------
+    $sets = [];
+    $bind = [];
+    if ($hasName || $name !== '') {
+        $sets[] = 'name = ?';
+        $bind[] = $name !== '' ? $name : $curName;
+    }
+    if ($hasMobile || $mobile !== '') {
+        $sets[] = 'mobile = ?';
+        $bind[] = $mobile !== '' ? normalize_phone($mobile) : $curMobile;
+    }
+    if ($hasDob || $dob !== '') {
+        $sets[] = 'date_of_birth = ?';
+        $bind[] = $dob !== '' ? $dob : $curDob;
+    }
+    if ($hasDesg)    { $sets[] = 'designation_bn = ?';   $bind[] = $designation_bn; }
+    if ($hasInst)    { $sets[] = 'institution_name = ?'; $bind[] = $institution_name; }
+    if ($hasDiv)     { $sets[] = 'division = ?';         $bind[] = $division; }
+    if ($hasDist)    { $sets[] = 'district = ?';         $bind[] = $district; }
+    if ($hasUpa)     { $sets[] = 'upazila = ?';          $bind[] = $upazila; }
 
-    // Return fresh user row so the frontend can update localStorage.
+    $pdo = db($CONFIG);
+    if ($sets) {
+        $bind[] = (int)$u['id'];
+        $pdo->prepare(
+            'UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = ?'
+        )->execute($bind);
+    }
+
+    // ----- Refresh row and stamp profile_completed_at write-once. --------------
+    // The stamp is gated on $sets having been non-empty: an empty PATCH (e.g.
+    // `{}`) on a gate-complete-but-unstamped row should NOT trigger a stamp
+    // (and, more importantly, should not fire an `auth.profile.update` audit
+    // entry for a no-op payload). Legitimate completion still flows because
+    // any meaningful PATCH has at least one entry in $sets.
+    //
+    // The UPDATE itself adds `AND profile_completed_at IS NULL` so two
+    // concurrent PATCHes for the same user resolve as first-writer-wins
+    // atomically rather than last-writer-wins on the timestamp.
     $cols = _user_select_cols($CONFIG);
     $stmt = $pdo->prepare("SELECT $cols FROM users WHERE id = ?");
     $stmt->execute([(int)$u['id']]);
-    $user = $stmt->fetch();
-    $user['is_admin'] = (bool)$user['is_admin'];
-    $user['profile_complete'] = profile_is_complete($user);
-    $user['profile_missing']  = profile_missing_fields($user);
-    send_json(['ok' => true, 'user' => $user]);
+    $refreshed = $stmt->fetch();
+
+    if ($sets) {
+        $alreadyStamped = !empty($refreshed['profile_completed_at']);
+        if (!$alreadyStamped && profile_is_complete($refreshed)) {
+            $pdo->prepare(
+                'UPDATE users SET profile_completed_at = ?
+                  WHERE id = ? AND profile_completed_at IS NULL'
+            )->execute([db_now($CONFIG), (int)$u['id']]);
+            $stmt->execute([(int)$u['id']]);
+            $refreshed = $stmt->fetch();
+        }
+
+        audit($CONFIG, (int)$u['id'], null, 'auth.profile.update');
+    }
+
+    $refreshed['is_admin']         = (bool)$refreshed['is_admin'];
+    $refreshed['profile_complete'] = profile_is_complete($refreshed);
+    $refreshed['profile_missing']  = profile_missing_fields($refreshed);
+    send_json(['ok' => true, 'user' => $refreshed]);
 }
 
 /* =================================================================== */

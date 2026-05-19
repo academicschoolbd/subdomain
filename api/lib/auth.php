@@ -21,6 +21,30 @@ function is_valid_bd_phone(string $phone): bool
     return strlen($rest) === 10 && $rest[0] === '1' && ctype_digit($rest);
 }
 
+/**
+ * v5pro — validate an ISO `YYYY-MM-DD` date-of-birth string.
+ *
+ * Accepts only strict `YYYY-MM-DD` (no time component, no slashes), confirms
+ * the string round-trips through DateTimeImmutable (so e.g. 1995-02-30 is
+ * rejected), is on or after 1900-01-01, is not in the future, and represents
+ * an age of at least 5 years (sanity bound — toddlers don't claim domains).
+ */
+function is_valid_dob(string $dob): bool
+{
+    $dob = trim($dob);
+    if ($dob === '') return false;
+    $d = DateTimeImmutable::createFromFormat('!Y-m-d', $dob);
+    if ($d === false) return false;
+    if ($d->format('Y-m-d') !== $dob) return false;
+    $min = new DateTimeImmutable('1900-01-01');
+    if ($d < $min) return false;
+    $today = new DateTimeImmutable('today');
+    if ($d > $today) return false;
+    $ageYears = (int)$today->diff($d)->y;
+    if ($ageYears < 5) return false;
+    return true;
+}
+
 function generate_otp(): string
 {
     $code = (string)random_int(0, 999999);
@@ -112,10 +136,22 @@ function read_bearer_token(): ?string
     return trim($m[1]);
 }
 
-/** Fields that make up the v2.1 user-profile gate before claiming. */
+/**
+ * Fields that make up the v5pro user-profile gate before claiming a subdomain.
+ *
+ * SINGLE SOURCE OF TRUTH — propagated automatically through profile_is_complete()
+ * and profile_missing_fields(), which are read by /api/auth/me, /api/auth/register,
+ * /api/auth/login, /api/auth/reset-password, /api/auth/profile, and
+ * /api/admin/users. The gate triplet is intentionally narrow (full name, mobile
+ * number, date of birth) so brand-new users can clear it on the dedicated
+ * /profile-complete page without filling the broader 7-field editor. The
+ * historical institution / location / designation fields remain valid optional
+ * columns on the profile patch endpoint and are still collected during the
+ * claim wizard step 2 — they are simply not part of the gate.
+ */
 function profile_required_fields(): array
 {
-    return ['name', 'mobile', 'designation_bn', 'institution_name', 'division', 'district', 'upazila'];
+    return ['name', 'mobile', 'date_of_birth'];
 }
 
 /** True if the row contains every profile_required_fields() value (non-empty). */
@@ -148,7 +184,7 @@ function _user_select_cols(array $CONFIG): string
     static $cache = null;
     if ($cache !== null) return $cache;
     $all = ['id','phone','email','name','avatar_url','provider','is_admin',
-            'mobile','designation_bn','institution_name','division','district','upazila',
+            'mobile','date_of_birth','designation_bn','institution_name','division','district','upazila',
             'profile_completed_at'];
     $present = db_columns(db($CONFIG), 'users', db_is_mysql($CONFIG));
     $keep = array_values(array_intersect($all, $present));

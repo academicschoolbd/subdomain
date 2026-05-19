@@ -272,6 +272,10 @@ function db_init_schema(array $CONFIG): void
         'profile_completed_at' => "ALTER TABLE users ADD COLUMN profile_completed_at $dt",
         // v2.3 — email + password auth (so users can sign in without OAuth).
         'password_hash'    => "ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL",
+        // v5pro — date_of_birth is the third member of the new profile-completion
+        // gate triplet (name + mobile + date_of_birth). SQLite stores DATE as TEXT
+        // but accepts the type alias for portability with MySQL.
+        'date_of_birth'    => "ALTER TABLE users ADD COLUMN date_of_birth DATE NULL",
     ];
     foreach ($addUser as $col => $sql) {
         if (!in_array($col, $userCols, true)) {
@@ -358,6 +362,7 @@ function db_migrate_users_phone_nullable(PDO $pdo, bool $mysql): void
                 district VARCHAR(64) NULL,
                 upazila VARCHAR(64) NULL,
                 profile_completed_at TEXT NULL,
+                date_of_birth DATE NULL,
                 is_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )"
@@ -365,7 +370,7 @@ function db_migrate_users_phone_nullable(PDO $pdo, bool $mysql): void
         $canonical = [
             'id','phone','email','name','avatar_url','provider','provider_id',
             'password_hash','mobile','designation_bn','institution_name',
-            'division','district','upazila','profile_completed_at','is_admin','created_at',
+            'division','district','upazila','profile_completed_at','date_of_birth','is_admin','created_at',
         ];
         $shared = array_values(array_intersect($canonical, $existingNames));
         $colList = '`' . implode('`,`', $shared) . '`';

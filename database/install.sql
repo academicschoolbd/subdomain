@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
     phone           VARCHAR(20)  NOT NULL UNIQUE,
     email           VARCHAR(255) NULL,
     name            VARCHAR(255) NULL,
+    -- v5pro profile-gate field: collected on the one-time /profile-complete page
+    -- alongside name + mobile. Existing SQLite installs migrate via db_init_schema().
+    date_of_birth   DATE         NULL,
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
