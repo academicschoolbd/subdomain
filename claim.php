@@ -55,7 +55,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
     <div class="d-flex justify-content-center gap-2 mb-4" data-wizard-steps>
       <span class="badge rounded-pill bg-primary">1. Choose name</span>
       <span class="badge rounded-pill bg-secondary-subtle text-muted">2. Institution info</span>
-      <span class="badge rounded-pill bg-secondary-subtle text-muted">3. Verify</span>
+      <span class="badge rounded-pill bg-secondary-subtle text-muted">3. Confirmed</span>
     </div>
 
     <!-- Step 1: Slug Selection -->
@@ -109,7 +109,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
             <div class="col-md-6"><label class="form-label small fw-semibold">Contact email</label><input class="form-control" name="contact_email" type="email"></div>
             <div class="col-md-6"><label class="form-label small fw-semibold">Website <span class="text-muted">(optional)</span></label><input class="form-control" name="website"></div>
             <div class="col-12 text-end">
-              <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-right me-1"></i> Submit claim</button>
+              <button class="btn btn-primary" type="submit"><i class="bi bi-shield-check me-1"></i> Review & Submit</button>
             </div>
           </div>
         </form>
@@ -118,10 +118,13 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
 
     <!-- Step 3: Success -->
     <div class="card border-0 shadow-sm mt-3 text-center p-5" data-step="3" hidden>
-      <i class="bi bi-check-circle-fill text-success fs-1 mb-3"></i>
-      <h4>Claim submitted!</h4>
-      <p class="text-muted">Your subdomain is pending review. You'll be notified once it's approved.</p>
-      <a href="/dashboard.php" class="btn btn-primary"><i class="bi bi-speedometer2 me-1"></i> Go to dashboard</a>
+      <i class="bi bi-check-circle-fill text-success fs-1 mb-3 d-block"></i>
+      <h4>Claim submitted successfully!</h4>
+      <p class="text-muted">Your subdomain request has been sent to the admin for review. You'll be notified once it's approved.</p>
+      <div class="d-flex gap-2 justify-content-center mt-3">
+        <a href="/dashboard.php" class="btn btn-primary"><i class="bi bi-speedometer2 me-1"></i> Go to Dashboard</a>
+        <a href="/directory.php" class="btn btn-outline-secondary"><i class="bi bi-grid me-1"></i> Browse Directory</a>
+      </div>
     </div>
   </div>
 </section>
