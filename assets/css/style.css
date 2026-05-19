@@ -2298,3 +2298,116 @@ html[data-theme="dark"] .pay-card__num { background: var(--c-surface); border-co
 }
 html[data-theme="dark"] .dns-form { background: var(--c-surface-2); border-color: var(--c-border-strong); }
 html[data-theme="dark"] .dns-table code { background: var(--c-surface); }
+
+
+
+/* ===========================================================================
+   v3.3 — Owner Manage modal + DNS panel/table mobile polish
+   ===========================================================================
+   The Manage modal is the single most-used screen on phones. The pre-3.3
+   layout had three issues on narrow viewports:
+     1) The DNS panel header was a `flex-between` with .h4 + pill on the
+        same line — the pill jumped under the title and the message text
+        flowed weirdly under both.
+     2) The DNS records table has 6 columns; the global `.dash-table`
+        mobile rules collapse to 2 cols, which buried the actions.
+     3) The tab bar (DNS records / Nameservers / Profile / …) overflowed
+        the modal width on phones, hiding tabs off-screen with no scroll.
+   This block fixes all three. =============================================== */
+
+/* DNS panel — title row + actions row stack cleanly on phones. */
+.dns-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dns-panel__lead { min-width: 0; flex: 1 1 240px; }
+.dns-panel__actions {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;
+}
+@media (max-width: 599px) {
+  .dns-panel { padding: 12px 14px; }
+  .dns-panel__head { flex-direction: column; align-items: stretch; }
+  .dns-panel__head .badge { align-self: flex-start; }
+  .dns-panel__actions .btn { flex: 1 1 calc(50% - 4px); justify-content: center; }
+}
+
+/* Manage modal — make the XL variant actually fit on phones. The base
+   .modal already has `max-height: calc(100vh - 24px)` on small screens,
+   but we want the modal to use the full viewport width minus a tiny
+   gutter so the long subdomain code in the header stops overflowing. */
+@media (max-width: 599px) {
+  .modal--xl { padding: 18px 16px; max-width: 100%; max-height: calc(100vh - 16px); }
+  /* The modal background pads 18px → on phones we want the modal flush
+     so the user gets the full width for tables. */
+  .modal-bg { padding: 8px; }
+}
+
+/* Tab strip in the manage modal — when there are 5–6 tabs, even the
+   shortest labels overflow ~360px viewports. Make the row horizontally
+   scrollable instead of wrapping into messy two-row chaos. */
+@media (max-width: 599px) {
+  .modal .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .modal .tab {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    font-size: .9rem;
+    white-space: nowrap;
+  }
+}
+
+/* DNS records table on phones. The default `.dash-table` mobile rules
+   collapse rows to a card-like 2-col grid that's tuned for the 5-col
+   "My Domains" table. The 6-col DNS table needs its own layout: type
+   pill on row 1, FQDN on row 2, content on row 3, actions on row 4. */
+@media (max-width: 700px) {
+  .dns-table thead { display: none; }
+  .dns-table tbody tr {
+    display: grid;
+    gap: 6px 10px;
+    grid-template-columns: 1fr auto;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .dns-table tbody tr:hover td { background: transparent; }
+  .dns-table tbody td {
+    padding: 0;
+    border: none;
+    font-size: .9rem;
+    word-break: break-word;
+  }
+  /* Column 1 = Type pill (row 1, col 1)
+     Column 2 = Name / FQDN (row 1, col 2 — but full-width on the next row)
+     Column 3 = Content / value
+     Column 4 = TTL
+     Column 5 = Proxied flag
+     Column 6 = Action buttons */
+  .dns-table tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .dns-table tbody td:nth-child(6) { grid-column: 2; grid-row: 1; text-align: right; }
+  .dns-table tbody td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .dns-table tbody td:nth-child(3) { grid-column: 1 / -1; grid-row: 3; color: var(--c-muted); }
+  .dns-table tbody td:nth-child(4),
+  .dns-table tbody td:nth-child(5) { display: none; }
+  .dns-table tbody td:nth-child(6) .btn { padding: 6px 10px; font-size: .8rem; }
+}
+
+/* Same treatment for the manage modal's profile / branding form-grids:
+   on phones force a single column so labels don't compress to 2-3 chars. */
+@media (max-width: 599px) {
+  .modal .form-grid { grid-template-columns: 1fr; }
+  .modal .field--wide { grid-column: 1 / -1; }
+}
+
+/* The tab-pane "header" rows inside the manage modal often used inline
+   `flex-between` with `flex-wrap:wrap`. On phones the right-side action
+   should drop full-width below the title for a tappable target. */
+@media (max-width: 599px) {
+  .manage-head .flex-between > .btn { width: 100%; justify-content: center; margin-top: 8px; }
+}
