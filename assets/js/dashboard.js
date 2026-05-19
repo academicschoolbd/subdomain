@@ -343,17 +343,29 @@
           : (c.dns_status === 'error'
               ? '<span class="badge badge--danger">DNS error</span>'
               : '<span class="badge">Pending</span>'));
+    // v3.3 — don't leak operator-level Cloudflare config copy into the
+    // owner UI. The DB stores `dns_message` strings like "Cloudflare not
+    // configured for institution.bd" so the *admin* knows why a claim is
+    // in `manual` mode — that's a platform concern, not the owner's. We
+    // only surface the message when it represents a real, user-actionable
+    // upstream error (dns_status = 'error'), and even then we strip any
+    // sentence that mentions Cloudflare-internal state.
+    let visibleMsg = '';
+    if (c.dns_status === 'error' && c.dns_message) {
+      const msg = String(c.dns_message);
+      if (!/cloudflare/i.test(msg)) visibleMsg = msg;
+    }
     return `
       <section class="dns-panel">
-        <header class="flex-between" style="flex-wrap:wrap;gap:10px;">
-          <div>
-            <h4 style="margin:0;">DNS &amp; Cloudflare</h4>
+        <header class="dns-panel__head">
+          <div class="dns-panel__lead">
+            <h4 style="margin:0;">DNS</h4>
             <p class="text-muted" style="margin:.2em 0;">Where requests for <code>${App.escapeHtml(fqdn)}</code> currently go.</p>
           </div>
           ${livePill}
         </header>
-        ${c.dns_message ? `<p class="text-muted" style="margin:.4em 0;font-size:.88rem;">${App.escapeHtml(c.dns_message)}</p>` : ''}
-        <div class="flex" style="gap:8px;flex-wrap:wrap;margin-top:10px;">
+        ${visibleMsg ? `<p class="text-danger" style="margin:.4em 0;font-size:.88rem;">${App.escapeHtml(visibleMsg)}</p>` : ''}
+        <div class="dns-panel__actions">
           <a class="btn btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(fqdn)}">Open ${App.escapeHtml(fqdn)} →</a>
           <button class="btn btn--sm" data-dns-retry="${c.id}" type="button">Retry DNS</button>
         </div>
@@ -949,9 +961,10 @@
     try {
       const r = await App.api('/tenant/' + claimId + '/dns');
       const items = r.items || [];
-      const cfHint = r.cf_configured
-        ? '<span class="text-muted">Records publish to Cloudflare automatically.</span>'
-        : '<span class="text-muted">Cloudflare is not configured — records save locally only; an admin must publish them upstream.</span>';
+      // v3.3 — owner UI shouldn't reveal whether the upstream provider
+      // (Cloudflare) is configured or not. That's an operator concern.
+      // Show one neutral, user-friendly line instead.
+      const cfHint = '<span class="text-muted">Changes save instantly. New records start resolving worldwide within a few minutes.</span>';
       host.innerHTML = `
         <div class="flex-between" style="flex-wrap:wrap;gap:10px;margin-bottom:10px;">
           <p class="text-muted" style="margin:0;">Manage DNS records for <code>${App.escapeHtml(r.subdomain)}</code>. ${cfHint}</p>
