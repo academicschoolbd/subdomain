@@ -1,0 +1,12 @@
+# institution.bd / smartschool.bd — robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /uploads/
+Disallow: /auth/callback
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /reset-password
+
+# Sitemap is generated dynamically from verified institutions.
+Sitemap: /sitemap.xml
