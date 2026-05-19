@@ -190,6 +190,17 @@ function db_init_schema(array $CONFIG): void
             created_at $now,
             updated_at $now
         )$charset",
+        // v5 — sponsors shown on the homepage.
+        "CREATE TABLE IF NOT EXISTS sponsors (
+            id $pk,
+            name VARCHAR(255) NOT NULL,
+            logo_url VARCHAR(512) NOT NULL,
+            website_url VARCHAR(512) NULL,
+            visible INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at $now,
+            updated_at $now
+        )$charset",
         // v4.1 — domain renewal history. One row per renewal request from
         // the owner. When the domain term price is 0 (free), the request
         // is created with status='approved' immediately and the parent
@@ -234,6 +245,7 @@ function db_init_schema(array $CONFIG): void
         "CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_dns_records_inst ON dns_records(institution_id)",
         "CREATE INDEX IF NOT EXISTS idx_support_pay_visible ON support_payments(visible, sort_order)",
+        "CREATE INDEX IF NOT EXISTS idx_sponsors_visible ON sponsors(visible, sort_order)",
         "CREATE INDEX IF NOT EXISTS idx_renewals_inst ON domain_renewals(institution_id)",
         "CREATE INDEX IF NOT EXISTS idx_renewals_status ON domain_renewals(status, created_at)",
     ];

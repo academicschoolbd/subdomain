@@ -53,6 +53,7 @@
     if (name === 'settings') loadSettings();
     if (name === 'integrations') loadIntegrations();
     if (name === 'payments') loadAdminPayments();
+    if (name === 'sponsors') loadAdminSponsors();
     if (name === 'renewals') loadRenewals();
   }
 
@@ -1097,6 +1098,169 @@
         }
         App.toast(m ? 'Updated' : 'Created', 'success');
         host.dataset.loaded = ''; loadAdminPayments();
+      } catch (err) { App.toast(err?.detail || 'Save failed', 'error'); }
+    });
+  }
+
+
+  // ─── Sponsors Pane ─────────────────────────────────────────────────────────
+
+  let _sponsors = [];
+  let _sponsorEditing = null;
+
+  function loadAdminSponsors() {
+    const host = document.querySelector('[data-sponsors-admin-host]');
+    if (!host || host.dataset.loaded) return;
+    host.dataset.loaded = '1';
+    host.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    fetchSponsors(host);
+  }
+
+  async function fetchSponsors(host) {
+    if (!host) host = document.querySelector('[data-sponsors-admin-host]');
+    try {
+      const r = await App.api('/admin/sponsors');
+      _sponsors = r.items || [];
+      renderSponsors(host);
+    } catch (e) {
+      host.innerHTML = `<div class="alert alert-danger">${App.escapeHtml(e?.detail || 'Failed to load sponsors')}</div>`;
+    }
+  }
+
+  function renderSponsors(host) {
+    const rows = _sponsors.map(s => `
+      <tr>
+        <td>${App.escapeHtml(s.name)}</td>
+        <td class="small text-muted text-truncate" style="max-width:180px;">${App.escapeHtml(s.logo_url)}</td>
+        <td class="small text-muted text-truncate" style="max-width:150px;">${App.escapeHtml(s.website_url || '-')}</td>
+        <td>
+          <div class="form-check form-switch d-inline-block">
+            <input class="form-check-input" type="checkbox" data-sponsor-toggle="${s.id}" ${s.visible ? 'checked' : ''}>
+          </div>
+        </td>
+        <td class="small">${s.sort_order}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-primary me-1" data-sponsor-edit="${s.id}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-sm btn-outline-danger" data-sponsor-del="${s.id}"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+
+    host.innerHTML = `
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold mb-0"><i class="bi bi-megaphone me-2"></i>Sponsor Logos</h6>
+            <button class="btn btn-primary btn-sm" data-sponsor-add><i class="bi bi-plus-lg me-1"></i>Add Sponsor</button>
+          </div>
+          ${_sponsors.length ? `
+          <div class="table-responsive">
+            <table class="table table-sm align-middle dash-table-v5">
+              <thead><tr><th>Name</th><th>Logo URL</th><th>Website</th><th>Visible</th><th>Sort</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>` : '<p class="text-muted small">No sponsors configured yet.</p>'}
+          <div data-sponsor-form-host></div>
+        </div>
+      </div>`;
+
+    // Wire toggle visibility
+    host.querySelectorAll('[data-sponsor-toggle]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const id = cb.getAttribute('data-sponsor-toggle');
+        try {
+          await App.api(`/admin/sponsors/${id}`, { method: 'PATCH', body: { visible: cb.checked } });
+          App.toast('Visibility updated', 'success');
+        } catch (e) { App.toast(e?.detail || 'Failed', 'error'); cb.checked = !cb.checked; }
+      });
+    });
+
+    // Wire edit
+    host.querySelectorAll('[data-sponsor-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.getAttribute('data-sponsor-edit'), 10);
+        _sponsorEditing = _sponsors.find(s => s.id === id) || null;
+        renderSponsorForm(host);
+      });
+    });
+
+    // Wire delete
+    host.querySelectorAll('[data-sponsor-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this sponsor?')) return;
+        const id = btn.getAttribute('data-sponsor-del');
+        try {
+          await App.api(`/admin/sponsors/${id}`, { method: 'DELETE' });
+          App.toast('Deleted', 'success');
+          host.dataset.loaded = ''; loadAdminSponsors();
+        } catch (e) { App.toast(e?.detail || 'Failed', 'error'); }
+      });
+    });
+
+    // Wire add
+    host.querySelector('[data-sponsor-add]')?.addEventListener('click', () => {
+      _sponsorEditing = null;
+      renderSponsorForm(host);
+    });
+  }
+
+  function renderSponsorForm(host) {
+    const formHost = host.querySelector('[data-sponsor-form-host]');
+    if (!formHost) return;
+    const s = _sponsorEditing;
+
+    formHost.innerHTML = `
+      <hr>
+      <h6 class="fw-semibold small">${s ? 'Edit' : 'Add'} Sponsor</h6>
+      <form data-sponsor-form>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label small">Name</label>
+            <input type="text" class="form-control form-control-sm" name="name" value="${App.escapeHtml(s?.name || '')}" required placeholder="Sponsor name">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Logo URL</label>
+            <input type="text" class="form-control form-control-sm" name="logo_url" value="${App.escapeHtml(s?.logo_url || '')}" required placeholder="https://... or /uploads/logo.png">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Website URL</label>
+            <input type="text" class="form-control form-control-sm" name="website_url" value="${App.escapeHtml(s?.website_url || '')}" placeholder="https://example.com">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small">Sort order</label>
+            <input type="number" class="form-control form-control-sm" name="sort_order" value="${s?.sort_order ?? 0}" min="0">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="visible" ${s ? (s.visible ? 'checked' : '') : 'checked'}>
+              <label class="form-check-label small">Visible</label>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i>${s ? 'Update' : 'Create'}</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-sponsor-cancel>Cancel</button>
+        </div>
+      </form>`;
+
+    formHost.querySelector('[data-sponsor-cancel]').addEventListener('click', () => { formHost.innerHTML = ''; });
+    formHost.querySelector('[data-sponsor-form]').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        name: fd.get('name'),
+        logo_url: fd.get('logo_url'),
+        website_url: fd.get('website_url'),
+        sort_order: parseInt(fd.get('sort_order'), 10) || 0,
+        visible: !!e.target.querySelector('[name=visible]').checked,
+      };
+      try {
+        if (s) {
+          await App.api(`/admin/sponsors/${s.id}`, { method: 'PATCH', body });
+        } else {
+          await App.api('/admin/sponsors', { method: 'POST', body });
+        }
+        App.toast(s ? 'Updated' : 'Created', 'success');
+        host.dataset.loaded = ''; loadAdminSponsors();
       } catch (err) { App.toast(err?.detail || 'Save failed', 'error'); }
     });
   }

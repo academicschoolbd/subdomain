@@ -1078,3 +1078,96 @@ function route_admin_renewal_decide(array $CONFIG, int $renewalId): void
     $stmt->execute([$renewalId]);
     send_json(['ok' => true, 'renewal' => _renewal_row($stmt->fetch())]);
 }
+
+
+/* =================================================================== */
+/*  v5 — admin-managed sponsors (homepage "Sponsored By")                */
+/* =================================================================== */
+
+function _admin_sponsor_row(array $r): array
+{
+    return [
+        'id'          => (int)$r['id'],
+        'name'        => (string)$r['name'],
+        'logo_url'    => (string)$r['logo_url'],
+        'website_url' => $r['website_url'] !== null ? (string)$r['website_url'] : null,
+        'visible'     => (bool)($r['visible'] ?? 0),
+        'sort_order'  => (int)($r['sort_order'] ?? 0),
+        'created_at'  => $r['created_at'] ?? null,
+        'updated_at'  => $r['updated_at'] ?? null,
+    ];
+}
+
+/** GET /api/admin/sponsors — every sponsor (visible or not). */
+function route_admin_sponsors_list(array $CONFIG): void
+{
+    require_admin($CONFIG);
+    $stmt = db($CONFIG)->query(
+        'SELECT * FROM sponsors ORDER BY sort_order ASC, id ASC'
+    );
+    $items = array_map('_admin_sponsor_row', $stmt->fetchAll());
+    send_json(['items' => $items]);
+}
+
+/** POST /api/admin/sponsors — create a sponsor. */
+function route_admin_sponsors_create(array $CONFIG): void
+{
+    $admin = require_admin($CONFIG);
+    $data = read_json_body();
+    $name = trim((string)($data['name'] ?? ''));
+    $logo_url = trim((string)($data['logo_url'] ?? ''));
+    if ($name === '') send_error('Name is required', 400);
+    if ($logo_url === '') send_error('Logo URL is required', 400);
+    $website_url = trim((string)($data['website_url'] ?? ''));
+    $visible = !empty($data['visible']) ? 1 : 0;
+    $sort_order = (int)($data['sort_order'] ?? 0);
+    $now = db_now($CONFIG);
+    $pdo = db($CONFIG);
+    $pdo->prepare(
+        'INSERT INTO sponsors (name, logo_url, website_url, visible, sort_order, created_at, updated_at) VALUES (?,?,?,?,?,?,?)'
+    )->execute([$name, $logo_url, $website_url !== '' ? $website_url : null, $visible, $sort_order, $now, $now]);
+    $id = (int)$pdo->lastInsertId();
+    $stmt = $pdo->prepare('SELECT * FROM sponsors WHERE id = ?');
+    $stmt->execute([$id]);
+    send_json(['ok' => true, 'item' => _admin_sponsor_row($stmt->fetch())]);
+}
+
+/** PATCH /api/admin/sponsors/{id} — partial update. */
+function route_admin_sponsors_update(array $CONFIG, int $id): void
+{
+    require_admin($CONFIG);
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT * FROM sponsors WHERE id = ?');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    if (!$row) send_error('Sponsor not found', 404);
+
+    $data = read_json_body();
+    $name = trim((string)(array_key_exists('name', $data) ? $data['name'] : $row['name']));
+    $logo_url = trim((string)(array_key_exists('logo_url', $data) ? $data['logo_url'] : $row['logo_url']));
+    $website_url = array_key_exists('website_url', $data) ? trim((string)$data['website_url']) : ($row['website_url'] ?? '');
+    $visible = array_key_exists('visible', $data) ? (!empty($data['visible']) ? 1 : 0) : (int)$row['visible'];
+    $sort_order = array_key_exists('sort_order', $data) ? (int)$data['sort_order'] : (int)$row['sort_order'];
+
+    if ($name === '') send_error('Name is required', 400);
+    if ($logo_url === '') send_error('Logo URL is required', 400);
+
+    $now = db_now($CONFIG);
+    $pdo->prepare(
+        'UPDATE sponsors SET name = ?, logo_url = ?, website_url = ?, visible = ?, sort_order = ?, updated_at = ? WHERE id = ?'
+    )->execute([$name, $logo_url, $website_url !== '' ? $website_url : null, $visible, $sort_order, $now, $id]);
+    $stmt->execute([$id]);
+    send_json(['ok' => true, 'item' => _admin_sponsor_row($stmt->fetch())]);
+}
+
+/** DELETE /api/admin/sponsors/{id} — hard delete. */
+function route_admin_sponsors_delete(array $CONFIG, int $id): void
+{
+    require_admin($CONFIG);
+    $pdo = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT id FROM sponsors WHERE id = ?');
+    $stmt->execute([$id]);
+    if (!$stmt->fetch()) send_error('Sponsor not found', 404);
+    $pdo->prepare('DELETE FROM sponsors WHERE id = ?')->execute([$id]);
+    send_json(['ok' => true]);
+}

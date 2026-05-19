@@ -394,8 +394,29 @@ function route_public_sitemap(array $CONFIG): void
 
 
 /* =================================================================== */
-/*  v3.2 — public-facing "Support the developer" payment methods         */
+/*  v5 — public sponsors for homepage "Sponsored By" section             */
 /* =================================================================== */
+
+/** GET /api/sponsors — list visible-only sponsors for the homepage. */
+function route_public_sponsors(array $CONFIG): void
+{
+    try {
+        $stmt = db($CONFIG)->query(
+            "SELECT id, name, logo_url, website_url FROM sponsors WHERE visible = 1 ORDER BY sort_order ASC, id ASC"
+        );
+        $items = array_map(static function ($r) {
+            return [
+                'id'          => (int)$r['id'],
+                'name'        => (string)$r['name'],
+                'logo_url'    => (string)$r['logo_url'],
+                'website_url' => $r['website_url'] ? (string)$r['website_url'] : null,
+            ];
+        }, $stmt->fetchAll());
+    } catch (PDOException $e) {
+        $items = [];
+    }
+    send_json(['items' => $items]);
+}
 
 /** GET /api/support/payments — list visible-only payment methods.
  *  Used by the dashboard's "Support Developer" pane. */

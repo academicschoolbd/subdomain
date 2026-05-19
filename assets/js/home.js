@@ -301,4 +301,27 @@
 
   loadFeatured();
 
+  // ─── Sponsors Section ──────────────────────────────────────────────────────
+
+  async function loadSponsors() {
+    const section = document.querySelector('[data-sponsors-section]');
+    const host = document.querySelector('[data-sponsors-list]');
+    if (!section || !host) return;
+    try {
+      const r = await App.api('/sponsors');
+      const items = r.items || [];
+      if (!items.length) return;
+      section.hidden = false;
+      host.innerHTML = items.map(s => `
+        <div class="col-6 col-md-4 col-lg-3">
+          <a class="card border-0 shadow-sm h-100 text-decoration-none text-center p-3" href="${s.website_url ? App.escapeHtml(s.website_url) : '#'}" target="_blank" rel="noopener">
+            <img src="${App.escapeHtml(s.logo_url)}" alt="${App.escapeHtml(s.name)}" class="mx-auto mb-2" style="max-height:60px;max-width:100%;object-fit:contain;">
+            <div class="small fw-semibold">${App.escapeHtml(s.name)}</div>
+          </a>
+        </div>`).join('');
+    } catch {}
+  }
+
+  loadSponsors();
+
 })();

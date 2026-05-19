@@ -124,6 +124,10 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
           <i class="bi bi-credit-card-fill nav-icon"></i>
           <span>Support Payments</span>
         </button>
+        <button class="dash-nav-item" data-pane-btn="sponsors" type="button">
+          <i class="bi bi-megaphone-fill nav-icon"></i>
+          <span>Sponsors</span>
+        </button>
         <button class="dash-nav-item" data-pane-btn="renewals" type="button">
           <i class="bi bi-arrow-repeat nav-icon"></i>
           <span>Renewals</span>
@@ -410,6 +414,15 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
       <!-- ===== PAYMENTS PANE ===== -->
       <section data-pane="payments" hidden>
         <div data-payments-admin-host></div>
+      </section>
+
+      <!-- ===== SPONSORS PANE ===== -->
+      <section data-pane="sponsors" hidden>
+        <div class="mb-4">
+          <h4><i class="bi bi-megaphone-fill me-2 text-primary"></i>Sponsors</h4>
+          <p class="text-muted">Manage sponsor logos shown on the homepage.</p>
+        </div>
+        <div data-sponsors-admin-host></div>
       </section>
 
       <!-- ===== RENEWALS PANE ===== -->

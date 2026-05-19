@@ -338,6 +338,19 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
 </section>
 
 
+<!-- ===== SPONSORED BY ===== -->
+<section class="py-5 bg-body-secondary" id="sponsors" data-sponsors-section hidden>
+  <div class="container">
+    <div class="text-center mb-4">
+      <span class="badge bg-primary-subtle text-primary fw-semibold mb-2">Our Sponsors</span>
+      <h2>Sponsored By</h2>
+      <p class="text-muted">Grateful to our sponsors who help keep this platform free.</p>
+    </div>
+    <div class="row g-3 justify-content-center" data-sponsors-list></div>
+  </div>
+</section>
+
+
 <!-- ===== WHATSAPP COMMUNITY ===== -->
 <section class="py-4" id="community">
   <div class="container">

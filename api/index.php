@@ -74,6 +74,9 @@ $routes = [
     // v3.2 — public payment methods (visible-only) for "Support Developer" pane.
     ['GET',    '#^support/payments$#',                                       'route_public_support_payments'],
 
+    // v5 — public sponsors for homepage "Sponsored By" section.
+    ['GET',    '#^sponsors$#',                                               'route_public_sponsors'],
+
     ['GET',    '#^admin/stats$#',                                            'route_admin_stats'],
     ['GET',    '#^admin/claims$#',                                           'route_admin_list_claims'],
     ['GET',    '#^admin/claims/(?P<id>\d+)$#',                               'route_admin_get_claim'],
@@ -105,6 +108,12 @@ $routes = [
     ['POST',   '#^admin/support/payments$#',                                 'route_admin_support_payments_create'],
     ['PATCH',  '#^admin/support/payments/(?P<id>\d+)$#',                     'route_admin_support_payments_update'],
     ['DELETE', '#^admin/support/payments/(?P<id>\d+)$#',                     'route_admin_support_payments_delete'],
+
+    // v5 — admin-managed sponsors.
+    ['GET',    '#^admin/sponsors$#',                                         'route_admin_sponsors_list'],
+    ['POST',   '#^admin/sponsors$#',                                         'route_admin_sponsors_create'],
+    ['PATCH',  '#^admin/sponsors/(?P<id>\d+)$#',                             'route_admin_sponsors_update'],
+    ['DELETE', '#^admin/sponsors/(?P<id>\d+)$#',                             'route_admin_sponsors_delete'],
 
     // v4.1 — admin claim-extend + renewals queue.
     ['POST',   '#^admin/claims/(?P<id>\d+)/extend$#',                        'route_admin_claim_extend'],
