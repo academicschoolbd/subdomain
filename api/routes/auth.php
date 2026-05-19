@@ -82,6 +82,16 @@ function _is_valid_email(string $e): bool
  */
 function route_auth_register(array $CONFIG): void
 {
+    // v3.3 — admins can disable manual email/password sign-up entirely.
+    // Existing accounts can still log in and OAuth providers still work,
+    // but new self-service registrations are blocked.
+    if (!settings_get_bool($CONFIG, 'email_registration_enabled', true)) {
+        send_json([
+            'ok' => false,
+            'errors' => ['email' => 'Manual sign-up is currently disabled. Please use one of the social providers, or contact the admin.'],
+            'detail' => 'Manual email registration is disabled.',
+        ], 403);
+    }
     $data = read_json_body();
     $name     = trim((string)($data['name'] ?? ''));
     $email    = _norm_email((string)($data['email'] ?? ''));

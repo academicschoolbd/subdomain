@@ -374,6 +374,7 @@ function route_admin_settings_get(array $CONFIG): void
             'require_documents'   => $s['require_documents']   === '1',
             'instant_claim'       => $s['instant_claim']       === '1',
             'cloudflare_auto_dns' => $s['cloudflare_auto_dns'] === '1',
+            'email_registration_enabled' => $s['email_registration_enabled'] === '1',
         ],
         'cloudflare' => [
             'configured'        => array_filter($cfBrands) ? true : false,
@@ -387,7 +388,7 @@ function route_admin_settings_set(array $CONFIG): void
 {
     $admin = require_admin($CONFIG);
     $data = read_json_body();
-    $allowed = ['require_documents', 'instant_claim', 'cloudflare_auto_dns'];
+    $allowed = ['require_documents', 'instant_claim', 'cloudflare_auto_dns', 'email_registration_enabled'];
     $changed = [];
     foreach ($allowed as $k) {
         if (!array_key_exists($k, $data)) continue;

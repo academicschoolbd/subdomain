@@ -1,9 +1,34 @@
-# Free Subdomain Platform — institution.bd & smartschool.bd  (v3.2)
+# Free Subdomain Platform — institution.bd & smartschool.bd  (v3.3)
 
 A free verified-subdomain platform for every Bangladeshi school, college,
 university, madrasa, polytechnic, training institute and NGO.
 
-> **v3.2 — what's new**
+> **v3.3 — what's new**
+> - **Mobile nav no longer locks up after sign-in.** The header CTA row
+>   used to overflow once `[avatar | name | sign-out | dark-mode | menu]`
+>   all crowded in, leaving the hamburger un-tappable on phones. The row
+>   now has a stable visual order, the user-name link collapses below
+>   900 px, and every control has a fixed-width hit target so the
+>   hamburger and dark-mode toggle never overlap each other.
+> - **GitHub icon visible in dark mode.** The OAuth provider button used
+>   to render an invisible black-on-near-black octocat in dark mode; now
+>   filter-inverted so it reads cleanly against either theme.
+> - **Admin can disable manual email registration.** New
+>   `email_registration_enabled` toggle in Admin → Platform settings.
+>   Turning it OFF hides the homepage "Create account" tab + every
+>   `data-mode="signup"` CTA, and `/api/auth/register` returns `403`.
+>   Existing accounts can still sign in, OAuth still works.
+> - **Cloudflare token test now accepts scoped tokens.** The validator
+>   used to call only `/user/tokens/verify`, which silently 401s on any
+>   token that doesn't include the `User → User Details: Read`
+>   permission — even when the token works perfectly for DNS. The new
+>   validator falls through `verify → /zones list → GET /zones/{id}`
+>   (the exact call the Cloudflare docs show), so a minimally-scoped
+>   `Zone → DNS → Edit` token now reports as valid.
+> - **Polished mobile header.** Tighter spacing, no horizontal scroll,
+>   no overlapping icons after login.
+
+> **v3.2 highlights**
 > - **Owner-managed DNS records.** Every verified tenant gets a real DNS
 >   editor in the Manage modal — A / AAAA / CNAME / TXT / MX / NS, with TTL,
 >   priority and Cloudflare-proxy toggle. Records publish to Cloudflare
@@ -194,7 +219,7 @@ and seeds the reserved-slug list + 12 demo institutions.
 
 ---
 
-## Production launch checklist (v3.2 final)
+## Production launch checklist (v3.3 final)
 
 Before flipping the public DNS, walk through this list once.
 
