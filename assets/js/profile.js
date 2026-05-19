@@ -79,6 +79,7 @@
       try {
         const r = await App.api('/auth/profile', { method: 'PATCH', body });
         App.setSession(null, r.user);
+        sessionStorage.removeItem('profile_redirect_done');
         App.toast('Profile saved!', 'success');
       } catch (e) {
         if (e?.status === 422 && e?.errors) {

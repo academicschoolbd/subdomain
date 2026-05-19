@@ -84,6 +84,7 @@ function integrations_sensitive_keys(): array
         'mail.smtp_pass',
         'jwt.secret',
         'telegram.bot_token',
+        'telegram.chat_id',
     ];
 }
 

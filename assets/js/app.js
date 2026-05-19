@@ -545,9 +545,10 @@ function boot() {
   }).catch(() => {});
 
   // Profile completeness check — redirect if incomplete
-  if (isAuthed() && location.pathname !== '/profile.php') {
+  if (isAuthed() && location.pathname !== '/profile.php' && !sessionStorage.getItem('profile_redirect_done')) {
     api('/auth/me').then(r => {
       if (r?.user && r.user.profile_complete === false) {
+        sessionStorage.setItem('profile_redirect_done', '1');
         toast('Please complete your profile', 'error');
         setTimeout(() => { location.href = '/profile.php'; }, 1500);
       }

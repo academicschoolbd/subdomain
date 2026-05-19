@@ -797,8 +797,7 @@
               ${secretField('int_tg_token', 'Bot Token', v, 'telegram.bot_token', 'Your Telegram bot token')}
             </div>
             <div class="col-md-4">
-              <label class="form-label small fw-semibold">Chat ID</label>
-              <input type="text" class="form-control form-control-sm" id="int_tg_chat_id" value="${App.escapeHtml(intVal(v, 'telegram.chat_id'))}" placeholder="-1001234567890">
+              ${secretField('int_tg_chat_id', 'Chat ID', v, 'telegram.chat_id', '-1001234567890')}
             </div>
             <div class="col-md-2 d-flex align-items-end">
               <button class="btn btn-outline-primary btn-sm w-100" data-tg-test><i class="bi bi-send me-1"></i>Test</button>
