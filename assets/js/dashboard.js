@@ -324,7 +324,7 @@
         ev.preventDefault();
         const body = Object.fromEntries(new FormData(pForm).entries());
         try {
-          await App.api(`/claims/${c.id}`, { method: 'PATCH', body });
+          await App.api(`/tenant/${c.id}/site`, { method: 'PATCH', body });
           App.toast('Profile saved!', 'success');
           loadDomains();
         } catch (e) { App.toast(e?.detail || 'Save failed', 'error'); }
@@ -338,7 +338,8 @@
         const kind = form.getAttribute('data-kind');
         const fd = new FormData(form);
         try {
-          await App.api(`/claims/${c.id}/upload/${kind}`, { method: 'POST', body: fd });
+          fd.append('kind', kind);
+          await App.api(`/tenant/${c.id}/upload-image`, { method: 'POST', body: fd });
           App.toast(`${kind} uploaded!`, 'success');
           loadDomains();
           openManage(c.id);

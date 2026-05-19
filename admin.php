@@ -240,6 +240,8 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
               <button class="btn btn-primary btn-sm" data-bulk-act="approve" type="button" disabled>Approve selected</button>
               <button class="btn btn-outline-warning btn-sm" data-bulk-act="needs_info" type="button" disabled>Needs info</button>
               <button class="btn btn-outline-danger btn-sm" data-bulk-act="reject" type="button" disabled>Reject</button>
+              <span class="vr d-none d-sm-inline mx-1"></span>
+              <button class="btn btn-outline-danger btn-sm ms-2" data-bulk-act="delete" type="button" disabled>Delete permanently <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(স্থায়ীভাবে মুছুন)</span></button>
             </div>
           </div>
           <div class="card-body">

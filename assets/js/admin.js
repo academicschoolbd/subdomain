@@ -197,7 +197,11 @@
       updateBulkButtons();
     });
     document.querySelectorAll('[data-bulk-act]').forEach(b => {
-      b.addEventListener('click', () => bulkDecide(b.getAttribute('data-bulk-act')));
+      b.addEventListener('click', () => {
+        const decision = b.getAttribute('data-bulk-act');
+        if (decision === 'delete') bulkDelete();
+        else bulkDecide(decision);
+      });
     });
   }
 
@@ -233,7 +237,10 @@
         <td>${statusBadge(c.status)}</td>
         <td><span class="badge badge-brand">${App.escapeHtml(c.brand)}</span></td>
         <td class="small text-muted">${App.escapeHtml(App.fmtDate(c.created_at))}</td>
-        <td class="text-end"><button class="btn btn-primary btn-sm" data-detail="${c.id}"><i class="bi bi-eye me-1"></i>Review</button></td>
+        <td class="text-end">
+          <button class="btn btn-primary btn-sm" data-detail="${c.id}"><i class="bi bi-eye me-1"></i>Review</button>
+          <button class="btn btn-outline-danger btn-sm ms-1" data-act="delete" data-id="${c.id}" data-slug="${App.escapeHtml(c.slug)}" data-subdomain="${App.escapeHtml(c.subdomain)}" title="Delete permanently" aria-label="Delete claim permanently"><i class="bi bi-trash" aria-hidden="true"></i></button>
+        </td>
       </tr>`).join('');
 
     tbody.querySelectorAll('[data-row-check]').forEach(c => {
@@ -242,14 +249,25 @@
     tbody.querySelectorAll('[data-detail]').forEach(b => {
       b.addEventListener('click', () => openDetail(parseInt(b.getAttribute('data-detail'), 10)));
     });
+    tbody.querySelectorAll('[data-act="delete"]').forEach(b => {
+      b.addEventListener('click', () => onRowDelete(b));
+    });
   }
 
   function updateBulkButtons() {
     const n = _selectedIds.size;
     document.querySelectorAll('[data-bulk-act]').forEach(b => {
       b.disabled = n === 0;
-      const base = { approve:'Approve', needs_info:'Needs info', reject:'Reject' }[b.getAttribute('data-bulk-act')] || '';
-      b.textContent = n > 0 ? `${base} (${n})` : `${base} selected`;
+      const act = b.getAttribute('data-bulk-act');
+      const base = { approve:'Approve', needs_info:'Needs info', reject:'Reject', delete:'Delete' }[act] || '';
+      const label = n > 0 ? `${base} (${n})` : `${base} selected`;
+      if (act === 'delete') {
+        // Preserve the bilingual Bangla parenthetical that ships in admin.php
+        // markup; assigning textContent here would strip the <span lang="bn">.
+        b.innerHTML = `${App.escapeHtml(label)} <span lang="bn" style="font-family: 'Noto Sans Bengali','Inter',sans-serif;">(স্থায়ীভাবে মুছুন)</span>`;
+      } else {
+        b.textContent = label;
+      }
     });
   }
 
@@ -264,6 +282,141 @@
       App.toast(`${decision} applied to ${r.count} claim(s)`, 'success');
       _selectedIds.clear(); loadOverview(); loadQueue();
     } catch (e) { App.toast(e?.detail || 'Bulk action failed', 'error'); }
+  }
+
+
+  // ─── Permanent-Delete Confirmation Dialog ──────────────────────────────────
+  // Mirrors App.showProfileGateDialog: cached Bootstrap modal, lang="bn"
+  // Bangla copy with explicit Noto Sans Bengali font, primary button cloned-
+  // and-replaced on each open, type-to-confirm guard.
+
+  let _deleteModal = null;
+  let _deleteModalInstance = null;
+
+  function confirmDeleteDialog({ token, subdomains, onConfirm }) {
+    if (!_deleteModal) {
+      const div = document.createElement('div');
+      div.className = 'modal fade';
+      div.id = 'adminDeleteModal';
+      div.tabIndex = -1;
+      div.setAttribute('aria-labelledby', 'adminDeleteModalTitle');
+      div.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+              <div class="d-flex flex-column">
+                <h5 class="modal-title mb-0" id="adminDeleteModalTitle"
+                    lang="bn" style="font-family: 'Noto Sans Bengali','Inter',sans-serif;">ক্লেইম স্থায়ীভাবে মুছবেন?</h5>
+                <small class="text-muted d-block">Delete claim permanently?</small>
+              </div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <p lang="bn" style="font-family: 'Noto Sans Bengali','Inter',sans-serif; line-height:1.7;">এই কাজটি ফেরানো যাবে না। প্রতিষ্ঠানের তথ্য, আপলোড করা ডকুমেন্ট, এবং নোটিশ স্থায়ীভাবে মুছে যাবে।</p>
+              <p class="small text-muted mb-2">This cannot be undone. The institution record, uploaded documents, and notices will be permanently removed.</p>
+              <div class="border rounded p-2 mb-3 bg-light-subtle small" data-confirm-context></div>
+              <label class="form-label small fw-semibold">Type <code data-confirm-token></code> to confirm:</label>
+              <input type="text" class="form-control form-control-sm" data-confirm-input autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+            </div>
+            <div class="modal-footer border-0 pt-0">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"
+                      lang="bn" style="font-family: 'Noto Sans Bengali','Inter',sans-serif;">বাতিল</button>
+              <button type="button" class="btn btn-danger" data-confirm-go disabled>
+                <span lang="bn" style="font-family: 'Noto Sans Bengali','Inter',sans-serif;">স্থায়ীভাবে মুছুন</span>
+                (Delete permanently)
+              </button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(div);
+      _deleteModal = div;
+      _deleteModalInstance = new bootstrap.Modal(div);
+    }
+
+    const tokenSlot = _deleteModal.querySelector('[data-confirm-token]');
+    const ctxSlot = _deleteModal.querySelector('[data-confirm-context]');
+    const input = _deleteModal.querySelector('[data-confirm-input]');
+    const goBtn = _deleteModal.querySelector('[data-confirm-go]');
+
+    tokenSlot.textContent = token;
+    const subs = (subdomains || []).filter(Boolean);
+    ctxSlot.innerHTML = subs.length
+      ? '<div class="text-muted mb-1"><span lang="bn" style="font-family: \'Noto Sans Bengali\',\'Inter\',sans-serif;">প্রভাবিত:</span> Affected:</div>' + subs.map(s => `<code class="me-1 d-inline-block">${App.escapeHtml(s)}</code>`).join('')
+      : '<div class="text-muted">No subdomain context.</div>';
+    input.value = '';
+
+    // Replace the primary button to drop stale handlers (mirror app.js pattern).
+    const fresh = goBtn.cloneNode(true);
+    fresh.disabled = true;
+    fresh.innerHTML = goBtn.innerHTML;
+    goBtn.parentNode.replaceChild(fresh, goBtn);
+
+    // Wire input gating against the strict token.
+    input.oninput = () => { fresh.disabled = input.value.trim() !== token; };
+
+    fresh.addEventListener('click', async () => {
+      const original = fresh.innerHTML;
+      fresh.disabled = true;
+      fresh.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting…';
+      try {
+        await onConfirm();
+        _deleteModalInstance.hide();
+      } catch (e) {
+        App.toast(e?.detail || 'Delete failed', 'error');
+        fresh.disabled = false;
+        fresh.innerHTML = original;
+      }
+    });
+
+    _deleteModalInstance.show();
+    setTimeout(() => input.focus(), 200);
+    return _deleteModalInstance;
+  }
+
+  async function onRowDelete(btn) {
+    const id = parseInt(btn.getAttribute('data-id'), 10);
+    const slug = btn.getAttribute('data-slug') || '';
+    const subdomain = btn.getAttribute('data-subdomain') || '';
+    confirmDeleteDialog({
+      token: slug,
+      subdomains: [subdomain],
+      onConfirm: async () => {
+        await App.api('/claims/' + id, { method: 'DELETE' });
+        App.toast('ক্লেইম মুছে ফেলা হয়েছে', 'success');
+        _selectedIds.delete(id);
+        loadOverview();
+        loadQueue();
+      }
+    });
+  }
+
+  async function bulkDelete() {
+    if (!_selectedIds.size) return;
+    const ids = [..._selectedIds];
+    const subdomains = ids.map(id => (_claims.find(c => c.id === id) || {}).subdomain).filter(Boolean);
+    confirmDeleteDialog({
+      token: 'delete ' + ids.length,
+      subdomains,
+      onConfirm: async () => {
+        let succeeded = 0;
+        const failures = [];
+        for (const id of ids) {
+          try { await App.api('/claims/' + id, { method: 'DELETE' }); succeeded++; }
+          catch (e) { failures.push({ id, detail: e?.detail || 'failed' }); }
+        }
+        const failed = failures.length;
+        let msg = `${succeeded} deleted`;
+        if (failed) {
+          const sample = failures.slice(0, 3).map(f => f.id);
+          const more = failed > sample.length ? ', …' : '';
+          msg += `, ${failed} failed (#${sample.join(', #')}${more})`;
+        }
+        App.toast(msg, failed ? 'error' : 'success');
+        _selectedIds.clear();
+        loadOverview();
+        loadQueue();
+      }
+    });
   }
 
 
