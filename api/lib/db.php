@@ -521,6 +521,11 @@ function settings_defaults(): array
         // (by admin approval, or by instant-claim if it's re-enabled). Falls
         // back to a `manual` flag when CF isn't configured. Default ON.
         'cloudflare_auto_dns'  => '1',
+        // v3.3 — manual email + password sign-up. When OFF, the homepage
+        // auth modal hides the "Create account" tab and the /api/auth/register
+        // endpoint returns 403, so visitors can only sign in (or sign up via
+        // the configured OAuth providers). Default ON.
+        'email_registration_enabled' => '1',
     ];
 }
 

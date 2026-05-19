@@ -1,4 +1,4 @@
-# Free Subdomain Platform — cPanel install guide  (v3.2)
+# Free Subdomain Platform — cPanel install guide  (v3.3)
 
 This guide gets `institution.bd` and `smartschool.bd` running on a standard
 **cPanel** shared host (PHP 8.0+) with:

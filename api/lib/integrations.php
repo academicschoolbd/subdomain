@@ -83,14 +83,20 @@ function integrations_sensitive_keys(): array
 }
 
 /** Mask a secret so the admin can confirm "yes, something's stored" without
- *  ever leaking the real value. */
+ *  ever leaking *any* character of the real value.
+ *
+ *  v3.3 — previously this returned `••••••••••wxyz` (the last 4 chars of
+ *  the secret). That was already a leak: it confirms guesses, helps
+ *  brute-force narrowing, and a Cloudflare API token's suffix is
+ *  particularly sensitive because tokens follow a known format. The new
+ *  behaviour returns a fixed-length all-bullets blob whose length is NOT
+ *  proportional to the real secret, so an observer can't even infer the
+ *  token's length, let alone any character of it.
+ */
 function integrations_mask(string $val): string
 {
-    $len = strlen($val);
-    if ($len === 0) return '';
-    if ($len <= 4) return str_repeat('•', $len);
-    $tail = substr($val, -4);
-    return str_repeat('•', max(4, min(20, $len - 4))) . $tail;
+    if ($val === '') return '';
+    return str_repeat('•', 16);
 }
 
 /** Read every override row from the DB. Returns ['dotted.key' => 'value']. */
@@ -324,8 +330,28 @@ function integrations_config_lookup(array $CONFIG, string $key)
 }
 
 /**
- * Quick connection test for the saved Cloudflare token: list zones the
- * token can see. Returns a small payload the admin UI can render.
+ * Quick connection test for the saved Cloudflare token.
+ *
+ * v3.3 — historically this only hit /user/tokens/verify, which requires
+ * the token to carry the "User → User Details: Read" permission. A
+ * minimally-scoped token (the recommended `Zone → DNS → Edit` only) is
+ * still 100% valid for everything the platform needs, but verify() would
+ * 401 on it and the admin would see "invalid token" for a perfectly
+ * working setup.
+ *
+ * The new flow mirrors Cloudflare's own documentation example
+ * (`curl https://api.cloudflare.com/client/v4/zones/$ZONE_ID …`):
+ *
+ *   1. Try /user/tokens/verify — fastest path, works for "All zones"
+ *      account-scoped tokens.
+ *   2. If that 401/403s, try /zones?per_page=1 — works for any token
+ *      with read access to ≥1 zone.
+ *   3. If THAT 401/403s too, try GET /zones/{configured-zone-id} for
+ *      each brand-zone the admin has saved — works for tokens scoped to
+ *      a single specific zone, which is the most-locked-down option CF
+ *      lets you create.
+ *
+ * The token is only considered invalid if all three paths fail.
  */
 function integrations_cloudflare_test(array $CONFIG): array
 {
@@ -334,15 +360,87 @@ function integrations_cloudflare_test(array $CONFIG): array
     if ($token === '') {
         return ['ok' => false, 'message' => 'No Cloudflare API token saved yet.'];
     }
-    $r = cf_request($token, 'GET', 'https://api.cloudflare.com/client/v4/user/tokens/verify');
-    if (!$r['ok']) {
-        $msg = 'Cloudflare rejected the token.';
+
+    $cfZones    = is_array($cf['zones'] ?? null) ? $cf['zones'] : [];
+    $configured = array_filter(array_map('strval', $cfZones));
+
+    // Step 1 — /user/tokens/verify (best when the token has User-Read scope).
+    $verify = cf_request($token, 'GET', 'https://api.cloudflare.com/client/v4/user/tokens/verify');
+    if ($verify['ok']) {
+        $zones = _cf_pull_zone_list($token);
+        return [
+            'ok'      => true,
+            'message' => 'Token verified.',
+            'status'  => (string)($verify['body']['result']['status'] ?? 'active'),
+            'method'  => 'tokens.verify',
+            'zones'   => $zones,
+        ];
+    }
+
+    // Step 2 — listing the zones this token can see. Works for any
+    // non-User-Read scoped token that has visibility on at least one zone.
+    $zr = cf_request($token, 'GET',
+        'https://api.cloudflare.com/client/v4/zones?per_page=50&status=active');
+    if ($zr['ok'] && is_array($zr['body']['result'] ?? null) && count($zr['body']['result']) > 0) {
+        $zones = [];
+        foreach ($zr['body']['result'] as $z) {
+            $zones[] = ['name' => (string)$z['name'], 'id' => (string)$z['id']];
+        }
+        return [
+            'ok'      => true,
+            'message' => 'Token verified by listing zones (token is scoped — that\'s fine).',
+            'status'  => 'active',
+            'method'  => 'zones.list',
+            'zones'   => $zones,
+        ];
+    }
+
+    // Step 3 — single-zone GETs against each brand's saved zone id.
+    // This is the exact call shown in Cloudflare's "Get a zone" docs and
+    // succeeds for the tightest single-zone scoped tokens.
+    $zoneHits = [];
+    foreach ($configured as $brand => $zoneId) {
+        $zoneId = trim((string)$zoneId);
+        if ($zoneId === '') continue;
+        $zr2 = cf_request($token, 'GET',
+            'https://api.cloudflare.com/client/v4/zones/' . rawurlencode($zoneId));
+        if ($zr2['ok'] && isset($zr2['body']['result']['name'])) {
+            $zoneHits[] = [
+                'name' => (string)$zr2['body']['result']['name'],
+                'id'   => (string)$zr2['body']['result']['id'],
+            ];
+        }
+    }
+    if ($zoneHits) {
+        return [
+            'ok'      => true,
+            'message' => 'Token verified against configured zone IDs.',
+            'status'  => 'active',
+            'method'  => 'zones.get',
+            'zones'   => $zoneHits,
+        ];
+    }
+
+    // Truly bad — surface the most informative Cloudflare error we got.
+    $msg = 'Cloudflare rejected the token.';
+    foreach ([$verify, $zr] as $r) {
         if (isset($r['body']['errors'][0]['message'])) {
             $msg = 'Cloudflare: ' . $r['body']['errors'][0]['message'];
+            break;
         }
-        return ['ok' => false, 'message' => $msg, 'http' => $r['http']];
     }
-    // Pull zone list for completeness.
+    return [
+        'ok'      => false,
+        'message' => $msg,
+        'http'    => $verify['http'] ?? 0,
+        'hint'    => 'If your token is restricted to a single zone, save its Zone ID in this page first, then click Test again.',
+    ];
+}
+
+/** Helper: pull the visible zone list for a token. Used after verify() succeeds
+ *  so the admin UI can show "verified, here are the zones I can see". */
+function _cf_pull_zone_list(string $token): array
+{
     $zr = cf_request($token, 'GET',
         'https://api.cloudflare.com/client/v4/zones?per_page=50&status=active');
     $zones = [];
@@ -351,10 +449,5 @@ function integrations_cloudflare_test(array $CONFIG): array
             $zones[] = ['name' => (string)$z['name'], 'id' => (string)$z['id']];
         }
     }
-    return [
-        'ok'      => true,
-        'message' => 'Token verified.',
-        'status'  => (string)($r['body']['result']['status'] ?? 'active'),
-        'zones'   => $zones,
-    ];
+    return $zones;
 }

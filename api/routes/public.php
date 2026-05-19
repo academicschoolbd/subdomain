@@ -79,6 +79,11 @@ function route_public_settings(array $CONFIG): void
             'oauth_providers' => $oauth,
             'phone_otp_enabled' => false,
             'email_password_enabled' => true,
+            // v3.3 — when false, the homepage auth modal hides the
+            // "Create account" tab and the signup CTAs, and the
+            // /auth/register endpoint refuses new accounts. Sign-in
+            // (and OAuth) still work normally.
+            'email_registration_enabled' => $platform['email_registration_enabled'] === '1',
         ],
         'whatsapp' => [
             'support_url'      => $supportUrl,

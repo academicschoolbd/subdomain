@@ -429,7 +429,19 @@
   async function openAuthModal(opts) {
     opts = opts || {};
     const el = ensureModalEl();
-    setAuthMode(opts.mode === 'signup' ? 'signup' : 'signin');
+
+    // v3.3 — honor the admin "allow manual email sign-up" toggle. We need
+    // to know whether registration is allowed before deciding which tab
+    // to start on, so peek at settings synchronously from cache when we
+    // can; otherwise just show "sign in" and we'll re-render once
+    // settings arrive below.
+    let regAllowed = true;
+    if (_settingsCache && _settingsCache.auth) {
+      regAllowed = _settingsCache.auth.email_registration_enabled !== false;
+    }
+    const requestedMode = opts.mode === 'signup' ? 'signup' : 'signin';
+    setAuthMode(regAllowed ? requestedMode : 'signin');
+    applyEmailRegToggle(regAllowed);
     if (opts.title) el.querySelector('[data-modal-title]').textContent = opts.title;
     if (opts.sub)   el.querySelector('[data-modal-sub]').textContent = opts.sub;
     el.classList.add('open');
@@ -445,6 +457,12 @@
       divider.hidden = true;
       return;
     }
+
+    // Re-apply the registration toggle now that we have authoritative
+    // settings (the synchronous peek may have used a stale cache).
+    const allowReg = !(s.auth && s.auth.email_registration_enabled === false);
+    applyEmailRegToggle(allowReg);
+    if (!allowReg && _modalMode === 'signup') setAuthMode('signin');
 
     const providers = (s.auth && s.auth.oauth_providers) || [];
     providersHost.innerHTML = '';
@@ -469,6 +487,44 @@
 
   function closeAuthModal() {
     if (_modalEl) _modalEl.classList.remove('open');
+  }
+
+  /**
+   * v3.3 — when the admin disables "Allow manual email sign-up" we hide
+   * the Create-account tab and the in-form switcher inside the modal,
+   * and reword the legend so visitors aren't confused. Sign-in still
+   * works exactly as before.
+   */
+  function applyEmailRegToggle(allowed) {
+    if (!_modalEl) return;
+    const tabSignup = _modalEl.querySelector('[data-tab="signup"]');
+    const tabSignin = _modalEl.querySelector('[data-tab="signin"]');
+    const switchRow = _modalEl.querySelector('[data-switch]');
+    if (tabSignup) tabSignup.hidden = !allowed;
+    if (tabSignin) tabSignin.hidden = !allowed && false; // always show sign-in
+    if (switchRow) switchRow.hidden = !allowed;
+    // If signup is gone, the tab row only has one item — drop it altogether
+    // so the modal looks intentional rather than empty.
+    const tabsRow = _modalEl.querySelector('.auth-tabs');
+    if (tabsRow) tabsRow.style.display = allowed ? '' : 'none';
+    if (!allowed) {
+      const sub = _modalEl.querySelector('[data-modal-sub]');
+      if (sub && _modalMode === 'signin') {
+        sub.textContent = 'Sign in to claim or manage your free subdomain. New accounts via Google / Facebook / GitHub.';
+      }
+    }
+  }
+
+  /**
+   * v3.3 — also gate the page-level "Create account" CTAs (the hero
+   * sign-in row, the final-CTA band, the dashboard's needs-auth card).
+   * Anything carrying `data-mode="signup"` gets hidden when the admin
+   * has turned off manual registration.
+   */
+  function applyEmailRegPageGates(allowed) {
+    document.querySelectorAll('[data-open-auth][data-mode="signup"]').forEach((el) => {
+      el.hidden = !allowed;
+    });
   }
 
   function requireAuth(opts) {
@@ -586,6 +642,12 @@
   function boot() {
     wireNav();
     injectWhatsAppFloat();
+    // v3.3 — fetch settings once on boot so we can hide the "Create account"
+    // CTAs across the page when the admin disables manual registration.
+    getSettings().then((s) => {
+      const allowReg = !(s && s.auth && s.auth.email_registration_enabled === false);
+      applyEmailRegPageGates(allowReg);
+    }).catch(() => { /* keep CTAs visible on settings error */ });
     if (isAuthed()) {
       // refresh user in background
       api('/auth/me').then((r) => {

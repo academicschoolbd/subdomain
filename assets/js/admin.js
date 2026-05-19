@@ -741,6 +741,10 @@
                 <input type="checkbox" name="cloudflare_auto_dns" ${s.cloudflare_auto_dns ? 'checked' : ''} />
                 <span><strong>Cloudflare auto-DNS</strong><span class="text-muted"> — automatically create / update the DNS record on Cloudflare when a claim is verified.</span></span>
               </label>
+              <label class="toggle-row">
+                <input type="checkbox" name="email_registration_enabled" ${s.email_registration_enabled ? 'checked' : ''} />
+                <span><strong>Allow manual email sign-up</strong><span class="text-muted"> — when ON, visitors can create an account with email + password from the homepage. Turn OFF to force everyone through Google / Facebook / GitHub OAuth (existing email accounts can still sign in).</span></span>
+              </label>
               <div class="text-right mt-3"><button class="btn btn--primary" type="submit">Save settings</button></div>
             </form>
           </div>
@@ -752,6 +756,7 @@
           instant_claim:        fd.get('instant_claim') ? true : false,
           require_documents:    fd.get('require_documents') ? true : false,
           cloudflare_auto_dns:  fd.get('cloudflare_auto_dns') ? true : false,
+          email_registration_enabled: fd.get('email_registration_enabled') ? true : false,
         };
         try {
           await App.api('/admin/settings', { method: 'POST', body });
@@ -999,11 +1004,13 @@
           const r = await App.api('/admin/integrations/test', { method: 'POST', body: { target: 'cloudflare' } });
           if (r.ok) {
             const zones = (r.zones || []).map((z) => z.name).join(', ');
-            testOut.innerHTML = '<span class="text-success">✓ ' + App.escapeHtml(r.message || 'OK')
-              + (zones ? ' — visible zones: <code>' + App.escapeHtml(zones) + '</code>' : '') + '</span>';
+            const via   = r.method ? ' <span class="text-muted">(via <code>' + App.escapeHtml(r.method) + '</code>)</span>' : '';
+            testOut.innerHTML = '<span class="text-success">✓ ' + App.escapeHtml(r.message || 'OK') + '</span>' + via
+              + (zones ? ' — visible zones: <code>' + App.escapeHtml(zones) + '</code>' : '');
             App.toast('Cloudflare token verified', 'success');
           } else {
-            testOut.innerHTML = '<span class="text-danger">✗ ' + App.escapeHtml(r.message || 'Token rejected') + '</span>';
+            const hint = r.hint ? '<br><small class="text-muted">' + App.escapeHtml(r.hint) + '</small>' : '';
+            testOut.innerHTML = '<span class="text-danger">✗ ' + App.escapeHtml(r.message || 'Token rejected') + '</span>' + hint;
             App.toast(r.message || 'Cloudflare rejected the token', 'error');
           }
         } catch (e) {

@@ -107,13 +107,31 @@ p  { margin: 0 0 1em; }
 @media (min-width: 900px) { .nav__links { display: flex; } }
 .nav__links a { color: var(--c-text); padding: 8px 12px; border-radius: var(--r-md); font-weight: 500; }
 .nav__links a:hover { background: rgba(15,23,42,.05); text-decoration: none; }
-.nav__cta { display: flex; align-items: center; gap: 8px; }
+.nav__cta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; min-width: 0; }
 .nav__toggle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; border-radius: var(--r-md);
   background: transparent; border: 1px solid var(--c-border); cursor: pointer;
+  flex-shrink: 0;
 }
 @media (min-width: 900px) { .nav__toggle { display: none; } }
+/* v3.3 — keep the inner flex wrapper from overflowing the viewport once the
+   user-chip (avatar + name + sign-out) is rendered after login. Without
+   this, long names push the hamburger / theme-toggle off-screen on phones,
+   leaving the page feeling "unresponsive". */
+.nav__cta > .flex {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-width: 0; flex-shrink: 1;
+}
+.nav__cta > .flex > a,
+.nav__cta > .flex > button {
+  min-width: 0;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav__cta > .flex > .avatar { flex-shrink: 0; }
 .nav__mobile {
   display: none; flex-direction: column; padding: 8px 0 16px;
   border-top: 1px solid var(--c-border);
@@ -447,6 +465,12 @@ section { padding: 56px 0; }
 .oauth-btn--google { }
 .oauth-btn--facebook { color: #1877F2; }
 .oauth-btn--github { color: #181717; }
+/* v3.3 — the GitHub octocat ships as a black SVG (#181717). On the
+   dark-theme oauth button the background is also near-black, so the icon
+   would otherwise vanish. Filter-invert flips the fill to near-white
+   without touching the asset itself. */
+html[data-theme="dark"] .oauth-btn--github { color: #f1f5f9; }
+html[data-theme="dark"] .oauth-btn--github img { filter: invert(1) brightness(1.4); }
 .modal__legal { color: var(--c-muted); font-size: .8rem; text-align: center; margin-top: 8px; }
 .modal__divider { text-align: center; color: var(--c-muted); margin: 14px 0 10px; font-size: .8rem; position: relative; }
 .modal__divider::before, .modal__divider::after {
@@ -1141,10 +1165,24 @@ textarea:focus-visible,
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--c-border);
   border-radius: var(--r-md); color: var(--c-text);
-  cursor: pointer;
+  cursor: pointer; flex-shrink: 0;
   transition: background .12s, border-color .12s, color .12s;
 }
 .nav__theme-toggle:hover { background: rgba(15,23,42,.05); }
+/* v3.3 — on phones the theme toggle, user-chip and hamburger all share
+   .nav__cta. Force a predictable visual order so the hamburger is always
+   the right-most (rightmost) element and the theme toggle never overlaps
+   the chip's avatar / sign-out. */
+@media (max-width: 899px) {
+  .nav__theme-toggle { order: 2; }
+  .nav__cta > .flex   { order: 1; }
+  .nav__toggle        { order: 3; }
+  .nav__cta { gap: 6px; }
+  /* Hide the long "name" link in the chip on phones — the avatar + the
+     account page are reachable from the dashboard / hamburger menu, and
+     keeping it on mobile is the main reason the row used to overflow. */
+  .nav__cta > .flex > a:not(.avatar) { display: none; }
+}
 
 /* "danger-text" ghost variant for the dashboard withdraw button. */
 .btn--danger-text { color: var(--c-danger); }
