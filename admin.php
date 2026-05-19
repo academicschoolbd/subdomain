@@ -78,6 +78,12 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
 
 <!-- ===== ADMIN SHELL ===== -->
 <div data-admin-root hidden id="main">
+  <!-- Mobile sidebar toggle (visible < 992px) -->
+  <button class="mobile-sidebar-toggle d-lg-none" type="button" data-sidebar-toggle aria-label="Toggle sidebar">
+    <i class="bi bi-list"></i>
+  </button>
+  <!-- Mobile sidebar backdrop -->
+  <div class="mobile-sidebar-backdrop" data-sidebar-backdrop></div>
   <div class="dash-layout">
 
     <!-- ===== SIDEBAR ===== -->
@@ -471,5 +477,22 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/assets/js/app.js" type="module"></script>
 <script src="/assets/js/admin.js" type="module"></script>
+<script>
+(function(){
+  var toggle = document.querySelector('[data-sidebar-toggle]');
+  var backdrop = document.querySelector('[data-sidebar-backdrop]');
+  var root = document.querySelector('[data-admin-root]');
+  if (!toggle || !root) return;
+  function open() { root.classList.add('mobile-sidebar-open'); }
+  function close() { root.classList.remove('mobile-sidebar-open'); }
+  toggle.addEventListener('click', function() {
+    root.classList.contains('mobile-sidebar-open') ? close() : open();
+  });
+  if (backdrop) backdrop.addEventListener('click', close);
+  root.querySelectorAll('.dash-nav-item').forEach(function(btn) {
+    btn.addEventListener('click', close);
+  });
+})();
+</script>
 </body>
 </html>

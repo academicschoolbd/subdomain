@@ -544,17 +544,26 @@ h1, h2, h3, h4, h5, h6 {
 }
 @media (max-width: 991.98px) {
   .dash-sidebar-v5 {
-    position: static;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--c-border);
-    padding: 1rem 0;
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 0.25rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    height: 100vh;
+    z-index: 1050;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    border-right: 1px solid var(--c-border);
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1.5rem 0;
+  }
+  .mobile-sidebar-open .dash-sidebar-v5 {
+    transform: translateX(0);
   }
   .dash-sidebar-v5 .sidebar-header,
-  .dash-sidebar-v5 .sidebar-footer { display: none; }
+  .dash-sidebar-v5 .sidebar-footer { display: flex; }
 }
 
 .dash-sidebar-v5 .sidebar-header {
@@ -902,3 +911,133 @@ h1, h2, h3, h4, h5, h6 {
   .navbar-v5, .dash-sidebar-v5, .wa-float, .footer-v5 { display: none !important; }
   .dash-layout { grid-template-columns: 1fr; }
 }
+
+/* ===== Mobile Sidebar Toggle & Backdrop ===== */
+.mobile-sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: inherit;
+  margin: 0.75rem 0.75rem 0;
+  flex-shrink: 0;
+}
+@media (max-width: 991.98px) {
+  .mobile-sidebar-toggle { display: inline-flex; }
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1040;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.mobile-sidebar-open .mobile-sidebar-backdrop {
+  display: block;
+  opacity: 1;
+}
+
+/* ===== Mobile Content Padding ===== */
+@media (max-width: 767.98px) {
+  .dash-content {
+    padding: 1rem;
+  }
+}
+
+/* ===== Mobile Admin Banner ===== */
+@media (max-width: 767.98px) {
+  .admin-banner-v5 {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .admin-banner-v5 .banner-icon {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ===== Mobile Table Safety ===== */
+@media (max-width: 767.98px) {
+  .dash-table-v5 {
+    min-width: 0;
+  }
+  .dash-table-v5 th,
+  .dash-table-v5 td {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* ===== Mobile Quick Tiles ===== */
+@media (max-width: 575.98px) {
+  .quick-tile-v5 .tile-num {
+    font-size: 1.25rem;
+  }
+  .quick-tile-v5 .tile-label {
+    font-size: 0.72rem;
+  }
+}
+
+/* ===== Modal XL Full Width on Mobile ===== */
+@media (max-width: 575.98px) {
+  .modal-xl .modal-dialog,
+  .modal-dialog.modal-xl {
+    margin: 0.5rem;
+    max-width: calc(100% - 1rem);
+  }
+}
+
+/* ===== Claim Form Input Group Mobile ===== */
+@media (max-width: 575.98px) {
+  .input-group:has([data-slug-input]) {
+    flex-wrap: wrap;
+  }
+  .input-group:has([data-slug-input]) [data-slug-input] {
+    width: 100%;
+    border-radius: var(--r-sm) !important;
+    margin-bottom: 0.5rem;
+  }
+  .input-group:has([data-slug-input]) [data-brand-select] {
+    max-width: 100% !important;
+    width: 100%;
+    border-radius: var(--r-sm) !important;
+  }
+}
+
+/* ===== Prevent Horizontal Overflow ===== */
+@media (max-width: 575.98px) {
+  body {
+    overflow-x: hidden;
+  }
+  .container, .container-fluid {
+    overflow-x: hidden;
+  }
+  .dash-layout {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
+
+/* ===== Directory Filters Mobile ===== */
+@media (max-width: 575.98px) {
+  .dir-card-v5 {
+    padding: 1rem;
+  }
+  .dir-card-v5 .dir-logo {
+    width: 40px;
+    height: 40px;
+    font-size: 0.95rem;
+  }
+}
+
