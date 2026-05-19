@@ -267,6 +267,19 @@
   async function loadFeatured() {
     const host = document.querySelector('[data-featured-list]');
     if (!host) return;
+
+    // Check admin setting: hide entire section if disabled
+    try {
+      const settings = await App.api('/settings');
+      if (settings?.platform?.show_recent_domains === false) {
+        const section = host.closest('section');
+        if (section) section.hidden = true;
+        return;
+      }
+    } catch {
+      // If settings fetch fails, default to showing the section
+    }
+
     try {
       let r;
       try { r = await App.api('/institutions?status=any&limit=6'); }

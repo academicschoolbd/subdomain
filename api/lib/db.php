@@ -584,6 +584,9 @@ function settings_defaults(): array
         // renewals (auto-extend on owner click). Anything > 0 routes the
         // request through the admin's pending-renewals queue.
         'domain_renewal_price_bdt' => '0',
+        // v5pro — toggle visibility of the "Recent Registered Domains"
+        // section on the homepage. Default ON (shown).
+        'show_recent_domains'  => '1',
         // v4.5 — admin-controllable brand / home theme color. The hex is
         // applied to every page via an inline <style> block emitted in
         // <head>, overriding style.css's :root --c-primary tokens. Empty

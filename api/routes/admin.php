@@ -392,6 +392,7 @@ function route_admin_settings_get(array $CONFIG): void
             'instant_claim'       => $s['instant_claim']       === '1',
             'cloudflare_auto_dns' => $s['cloudflare_auto_dns'] === '1',
             'email_registration_enabled' => $s['email_registration_enabled'] === '1',
+            'show_recent_domains' => ($s['show_recent_domains'] ?? '1') === '1',
             'domain_term_days'    => (int)($s['domain_term_days']    ?? 365),
             'domain_renewal_price_bdt' => (int)($s['domain_renewal_price_bdt'] ?? 0),
             // v4.5 — brand / home theme.
@@ -413,7 +414,7 @@ function route_admin_settings_set(array $CONFIG): void
     $admin = require_admin($CONFIG);
     $data = read_json_body();
     $boolKeys = ['require_approval', 'require_documents', 'instant_claim',
-                 'cloudflare_auto_dns', 'email_registration_enabled'];
+                 'cloudflare_auto_dns', 'email_registration_enabled', 'show_recent_domains'];
     $intKeys  = ['domain_term_days', 'domain_renewal_price_bdt'];
     $changed = [];
     foreach ($boolKeys as $k) {

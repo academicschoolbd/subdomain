@@ -565,6 +565,12 @@
                 <label class="form-check-label" for="set_email_registration">Email registration enabled</label>
               </div>
             </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_recent_domains" ${s.show_recent_domains !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_recent_domains">Show recent domains on homepage</label>
+              </div>
+            </div>
           </div>
           <hr>
 
@@ -617,6 +623,7 @@
         instant_claim: host.querySelector('#set_instant_claim').checked,
         cloudflare_auto_dns: host.querySelector('#set_cloudflare_auto_dns').checked,
         email_registration_enabled: host.querySelector('#set_email_registration').checked,
+        show_recent_domains: host.querySelector('#set_show_recent_domains').checked,
         domain_term_days: parseInt(host.querySelector('#set_term_days').value, 10) || 365,
         domain_renewal_price_bdt: parseInt(host.querySelector('#set_renewal_price').value, 10) || 0,
         theme_primary_hex: themeHex ? '#' + themeHex : '',
