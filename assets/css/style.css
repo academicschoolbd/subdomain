@@ -3572,3 +3572,294 @@ html { scroll-behavior: smooth; scroll-padding-top: 72px; }
 /* v4.5 — make table-data labels available so the stacked-card mobile
    layout above can show a "Brand", "Status" etc. label per row. JS
    that builds the table needs to add `data-label="..."` per <td>. */
+
+
+/* ===========================================================================
+   v5 — mobile drawer for admin / dashboard sidebar, sponsor strip,
+        footer system-status indicator, vertical timeline.
+   Strictly additive over v4.5 — no existing rules are overridden, the new
+   styles only kick in below 900px (where the original CSS stacked the
+   sidebar into a horizontal strip) and on the new opt-in elements.
+   =========================================================================== */
+
+/* ---------- 1) Drawer trigger button (mobile only, lives at top of .dash-main) ---------- */
+.dash-drawer-trigger {
+  display: none;
+  align-items: center; gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  color: var(--c-heading); font-weight: 700; font-size: .94rem;
+  font-family: inherit; cursor: pointer; text-align: left;
+  box-shadow: var(--shadow-xs);
+  transition: background .12s, border-color .12s, transform .12s, box-shadow .12s;
+}
+.dash-drawer-trigger:hover { border-color: var(--c-border-strong); box-shadow: var(--shadow-sm); }
+.dash-drawer-trigger:active { transform: scale(.98); }
+.dash-drawer-trigger__bars {
+  width: 28px; height: 28px; flex: 0 0 28px;
+  border-radius: 8px;
+  background: var(--c-primary-50); color: var(--c-primary-700);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dash-drawer-trigger__label { flex: 1; min-width: 0; }
+.dash-drawer-trigger__hint {
+  margin-left: auto;
+  color: var(--c-muted); font-weight: 500; font-size: .8rem;
+}
+@media (max-width: 899px) { .dash-drawer-trigger { display: inline-flex; } }
+
+/* ---------- 2) Sidebar transformed into a true left-slide-in drawer below 900px ---------- */
+@media (max-width: 899px) {
+  /* Override v4.5's horizontal-strip sidebar with a real off-canvas drawer. */
+  .dash-sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(86vw, 320px);
+    z-index: 95;
+
+    background: var(--c-surface);
+    border-right: 1px solid var(--c-border);
+    box-shadow: 12px 0 30px -12px rgba(15,23,42,.18);
+
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    gap: 4px;
+    padding: 18px 14px 18px;
+
+    transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.32,.72,.34,1);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .dash-sidebar.is-open { transform: translateX(0); }
+
+  .dash-sidebar__head {
+    display: flex !important;
+    width: auto !important;
+    align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 6px 6px 14px;
+    border-bottom: 1px solid var(--c-border);
+    margin-bottom: 10px;
+  }
+  .dash-sidebar__head > span:not(.dash-sidebar__crest) { flex: 1; min-width: 0; }
+
+  .dash-sidebar__close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    border-radius: var(--r-md);
+    background: transparent;
+    border: 1px solid var(--c-border);
+    color: var(--c-muted);
+    cursor: pointer; font-family: inherit;
+    transition: background .12s, color .12s;
+  }
+  .dash-sidebar__close:hover { background: rgba(15,23,42,.06); color: var(--c-heading); }
+  .dash-sidebar__close svg { width: 18px; height: 18px; }
+
+  .dash-nav {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    gap: 2px !important;
+    flex: 1 1 auto;
+  }
+  .dash-nav__item {
+    flex: 0 0 auto !important;
+    width: 100%;
+    min-height: 48px;        /* generous touch target */
+    padding: 12px 14px;
+    font-size: .98rem;
+  }
+  .dash-nav__item .dash-nav__count { margin-left: auto; }
+
+  .dash-sidebar__foot {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 14px 4px 4px !important;
+    border-top: 1px dashed var(--c-border) !important;
+    margin-top: 8px;
+  }
+  .dash-sidebar__foot .btn { flex: 1 1 calc(50% - 4px); justify-content: center; }
+}
+
+@media (min-width: 900px) {
+  /* Desktop: hide the close button & always show sidebar; ignore .is-open. */
+  .dash-sidebar__close { display: none; }
+}
+.dash-sidebar__close { display: none; }
+@media (max-width: 899px) {
+  .dash-sidebar__close { display: inline-flex; }
+}
+
+/* ---------- 3) Backdrop overlay for the drawer ---------- */
+.dash-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 90;
+  transition: opacity .22s ease;
+}
+.dash-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (min-width: 900px) {
+  .dash-backdrop { display: none !important; }
+}
+
+/* ---------- 4) Body scroll-lock when the drawer is open ---------- */
+body.is-drawer-open { overflow: hidden; }
+
+/* ---------- 5) Dark-theme tweaks for the drawer ---------- */
+html[data-theme="dark"] .dash-sidebar {
+  background: var(--c-surface);
+  border-right-color: var(--c-border);
+  box-shadow: 12px 0 30px -12px rgba(0,0,0,.55);
+}
+html[data-theme="dark"] .dash-drawer-trigger { background: var(--c-surface); }
+html[data-theme="dark"] .dash-backdrop { background: rgba(0,0,0,.55); }
+
+/* ---------- 6) Sponsors strip (homepage hero — admin can edit/show/hide) ---------- */
+.hero-sponsors {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 18px 28px;
+  margin: 28px auto 0;
+  padding: 14px 0 0;
+  max-width: 720px;
+}
+.hero-sponsors__label {
+  width: 100%; text-align: center;
+  color: var(--c-muted);
+  font-size: .72rem; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.hero-sponsors a, .hero-sponsors__item {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-full);
+  color: var(--c-muted);
+  font-weight: 700; font-size: .88rem;
+  letter-spacing: -.005em;
+  filter: grayscale(1);
+  opacity: .7;
+  transition: filter .15s ease, opacity .15s ease, color .15s ease, border-color .15s ease, transform .12s ease;
+  text-decoration: none;
+}
+.hero-sponsors a:hover, .hero-sponsors a:focus-visible,
+.hero-sponsors__item:hover {
+  filter: grayscale(0);
+  opacity: 1;
+  color: var(--c-heading);
+  border-color: var(--c-border-strong);
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+.hero-sponsors__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c-primary);
+}
+.hero-sponsors[hidden] { display: none !important; }
+
+/* ---------- 7) "How it works" — vertical timeline on mobile ---------- */
+.steps--timeline { counter-reset: step; }
+.steps--timeline .step__time {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 3px 10px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-full);
+  color: var(--c-muted);
+  font-size: .72rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase;
+}
+@media (max-width: 799px) {
+  .steps--timeline {
+    grid-template-columns: 1fr !important;
+    position: relative;
+    padding-left: 14px;
+  }
+  .steps--timeline::before {
+    content: '';
+    position: absolute;
+    left: 30px; top: 6px; bottom: 6px;
+    width: 2px;
+    background: var(--c-border);
+    border-radius: 2px;
+  }
+  .steps--timeline .step {
+    padding-left: 70px;
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .steps--timeline .step::before {
+    /* override the round circle with a square blue chip per design prompt */
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    top: 18px; left: 16px;
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--c-primary);
+    color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 1rem;
+    box-shadow: 0 4px 10px -2px rgba(15,118,110,.35);
+  }
+}
+
+/* ---------- 8) Footer status indicator + "Built with ❤️ in Bangladesh" ---------- */
+.footer__status {
+  display: flex; align-items: center; flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  margin-top: 12px;
+  font-size: .82rem;
+  color: #94a3b8;
+}
+.footer__status-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+  border-radius: var(--r-full);
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: .8rem;
+}
+.footer__status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34,197,94,.55);
+  animation: livePulse 2s ease-out infinite;
+}
+.footer__status-dot--err { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.55); }
+.footer__status-dot--warn { background: #f59e0b; box-shadow: 0 0 0 0 rgba(245,158,11,.55); }
+.footer__heart {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #cbd5e1; font-weight: 500;
+}
+.footer__heart-ico {
+  display: inline-block; color: #ef4444; font-size: .9em; line-height: 1;
+}
+@media (max-width: 599px) {
+  .footer__bottom {
+    flex-direction: column; align-items: center; text-align: center;
+  }
+  .footer__bottom > span { width: 100%; }
+  .footer__status { justify-content: center; }
+}
+
+/* ---------- 9) Dark-mode polish for the footer pill ---------- */
+html[data-theme="dark"] .footer__status-pill {
+  background: rgba(255,255,255,.05);
+  border-color: rgba(255,255,255,.1);
+}

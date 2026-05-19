@@ -54,6 +54,13 @@
   <div class="container footer__bottom">
     <span>© <span data-year></span> institution.bd</span>
     <span><a href="/">Home</a> · <a href="/privacy.php">Privacy</a> · <a href="/terms.php">Terms</a></span>
+    <span class="footer__heart"><span class="footer__heart-ico" aria-hidden="true">&#10084;&#65039;</span> Built with love in Bangladesh</span>
+  </div>
+  <div class="container footer__status" aria-live="polite">
+    <span class="footer__status-pill" data-platform-status>
+      <span class="footer__status-dot" aria-hidden="true"></span>
+      <span data-platform-status-text>All systems operational</span>
+    </span>
   </div>
 </footer>
 

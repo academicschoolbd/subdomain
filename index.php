@@ -136,6 +136,21 @@ try {
       <span class="hero__signin-sep">·</span>
       Google · Facebook · GitHub · Email
     </p>
+
+    <!-- v5 — Sponsor logos strip (admin can edit / hide / show via Platform settings).
+         Marked with [data-hero-sponsors] so admin.js can swap items in. Hidden by default
+         when there is nothing configured. -->
+    <div class="hero-sponsors" data-hero-sponsors>
+      <span class="hero-sponsors__label">Trusted infrastructure partners</span>
+      <a class="hero-sponsors__item" href="https://metrovps.com" target="_blank" rel="noopener nofollow sponsored" data-sponsor="metrovps">
+        <span class="hero-sponsors__dot" aria-hidden="true"></span>
+        MetroVPS
+      </a>
+      <a class="hero-sponsors__item" href="https://hostomega.com" target="_blank" rel="noopener nofollow sponsored" data-sponsor="hostomega">
+        <span class="hero-sponsors__dot" aria-hidden="true" style="background:#22c55e;"></span>
+        Hostomega
+      </a>
+    </div>
   </div>
 </header>
 
@@ -263,22 +278,26 @@ try {
       <h2>From subdomain idea to live site in 4 steps</h2>
       <p>Most institutions are live within one working day — many under a minute.</p>
     </div>
-    <div class="steps">
+    <div class="steps steps--timeline">
       <div class="step">
         <h3>Sign in</h3>
         <p>Use email + password — or one-click with Google, Facebook, GitHub.</p>
+        <span class="step__time">~ 30 seconds</span>
       </div>
       <div class="step">
         <h3>Pick your subdomain</h3>
         <p>Live availability check — reserved names auto-blocked. Choose institution.bd or smartschool.bd.</p>
+        <span class="step__time">~ 30 seconds</span>
       </div>
       <div class="step">
         <h3>Verify in one upload</h3>
         <p>Optional: upload an EIIN certificate, board letter, trade licence or admin NID for a verified badge.</p>
+        <span class="step__time">~ 1 minute</span>
       </div>
       <div class="step">
         <h3>Go live</h3>
         <p>On approval, Cloudflare creates your DNS record automatically and your subdomain is online.</p>
+        <span class="step__time">Instant activation</span>
       </div>
     </div>
   </div>
@@ -416,7 +435,17 @@ try {
   </div>
   <div class="container footer__bottom">
     <span>© <span data-year></span> institution.bd — All rights reserved.</span>
-    <span><a href="/privacy.php">Privacy</a> · <a href="/terms.php">Terms</a> · Made with ❤ in Bangladesh.</span>
+    <span><a href="/privacy.php">Privacy</a> · <a href="/terms.php">Terms</a></span>
+    <span class="footer__heart">
+      <span class="footer__heart-ico" aria-hidden="true">&#10084;&#65039;</span>
+      Built with love in Bangladesh
+    </span>
+  </div>
+  <div class="container footer__status" aria-live="polite">
+    <span class="footer__status-pill" data-platform-status>
+      <span class="footer__status-dot" aria-hidden="true"></span>
+      <span data-platform-status-text>All systems operational</span>
+    </span>
   </div>
 </footer>
 

@@ -82,7 +82,8 @@
 
     // v4.5 — instant-response feel:
     //  1) Close the global mobile drawer (hamburger menu) if it's open.
-    //  2) On phones / tablets where the sidebar collapses to a horizontal
+    //  2) v5 — also close the new sidebar drawer (data-dash-sidebar).
+    //  3) On phones / tablets where the sidebar collapses to a horizontal
     //     strip, scroll the active pane into view at the top of the
     //     viewport so the user can immediately read the new content
     //     instead of staring at the unchanged sidebar.
@@ -91,6 +92,9 @@
       drawer.classList.remove('open');
       const t = document.querySelector('[data-nav-toggle]');
       if (t) t.setAttribute('aria-expanded', 'false');
+    }
+    if (window.AppDrawer && window.AppDrawer.isOpen()) {
+      window.AppDrawer.close();
     }
     if (window.matchMedia && window.matchMedia('(max-width: 899px)').matches) {
       const main = document.querySelector('.dash-main');
