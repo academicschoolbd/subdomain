@@ -417,7 +417,7 @@
       const reason = (fd.get('reason') || '').trim();
       if (!slug) return;
       try {
-        await App.api('/admin/reserved', { method: 'POST', body: { slug, reason } });
+        await App.api('/admin/reserved-slugs', { method: 'POST', body: { slug, reason } });
         App.toast(`"${slug}" reserved`, 'success');
         form.reset();
         loadReserved();
@@ -429,7 +429,7 @@
     const host = document.querySelector('[data-reserved]');
     if (!host) return;
     host.innerHTML = '<div class="skeleton-v5" style="height:60px;"></div>';
-    App.api('/admin/reserved').then(r => {
+    App.api('/admin/reserved-slugs').then(r => {
       const items = r.items || [];
       if (!items.length) { host.innerHTML = '<p class="text-muted small">No reserved slugs.</p>'; return; }
       host.innerHTML = `<div class="list-group list-group-flush">${items.map(i => `
@@ -440,7 +440,7 @@
       host.querySelectorAll('[data-del-reserved]').forEach(b => {
         b.addEventListener('click', async () => {
           if (!confirm('Release this reserved slug?')) return;
-          try { await App.api(`/admin/reserved/${b.getAttribute('data-del-reserved')}`, { method: 'DELETE' }); App.toast('Released', 'success'); loadReserved(); }
+          try { await App.api(`/admin/reserved-slugs/${b.getAttribute('data-del-reserved')}`, { method: 'DELETE' }); App.toast('Released', 'success'); loadReserved(); }
           catch (e2) { App.toast(e2?.detail || 'Failed', 'error'); }
         });
       });
