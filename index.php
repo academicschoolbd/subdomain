@@ -437,7 +437,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
 
 
 <!-- ===== FINAL CTA ===== -->
-<section class="py-5">
+<section class="py-5" id="cta">
   <div class="container">
     <div class="cta-band-v5">
       <span class="badge bg-white bg-opacity-25 text-white mb-2">Ready when you are</span>

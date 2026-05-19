@@ -1035,3 +1035,12 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ===== Integrations pane mobile fix ===== */
+[data-integrations-host] code {
+  word-break: break-all;
+  font-size: 0.75rem;
+}
+[data-integrations-host] .card-body {
+  overflow-x: hidden;
+}
+

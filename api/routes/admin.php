@@ -393,6 +393,13 @@ function route_admin_settings_get(array $CONFIG): void
             'cloudflare_auto_dns' => $s['cloudflare_auto_dns'] === '1',
             'email_registration_enabled' => $s['email_registration_enabled'] === '1',
             'show_recent_domains' => ($s['show_recent_domains'] ?? '1') === '1',
+            'show_stats_section'          => ($s['show_stats_section'] ?? '1') === '1',
+            'show_brands_section'         => ($s['show_brands_section'] ?? '1') === '1',
+            'show_how_it_works_section'   => ($s['show_how_it_works_section'] ?? '1') === '1',
+            'show_bengali_usecase_section'=> ($s['show_bengali_usecase_section'] ?? '1') === '1',
+            'show_whatsapp_section'       => ($s['show_whatsapp_section'] ?? '1') === '1',
+            'show_faq_section'            => ($s['show_faq_section'] ?? '1') === '1',
+            'show_cta_section'            => ($s['show_cta_section'] ?? '1') === '1',
             'domain_term_days'    => (int)($s['domain_term_days']    ?? 365),
             'domain_renewal_price_bdt' => (int)($s['domain_renewal_price_bdt'] ?? 0),
             // v4.5 — brand / home theme.
@@ -414,7 +421,10 @@ function route_admin_settings_set(array $CONFIG): void
     $admin = require_admin($CONFIG);
     $data = read_json_body();
     $boolKeys = ['require_approval', 'require_documents', 'instant_claim',
-                 'cloudflare_auto_dns', 'email_registration_enabled', 'show_recent_domains'];
+                 'cloudflare_auto_dns', 'email_registration_enabled', 'show_recent_domains',
+                 'show_stats_section', 'show_brands_section', 'show_how_it_works_section',
+                 'show_bengali_usecase_section', 'show_whatsapp_section', 'show_faq_section',
+                 'show_cta_section'];
     $intKeys  = ['domain_term_days', 'domain_renewal_price_bdt'];
     $changed = [];
     foreach ($boolKeys as $k) {

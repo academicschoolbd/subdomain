@@ -565,10 +565,57 @@
                 <label class="form-check-label" for="set_email_registration">Email registration enabled</label>
               </div>
             </div>
+          </div>
+          <hr>
+
+          <h6 class="fw-semibold mb-3"><i class="bi bi-house me-2"></i>Homepage Sections</h6>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_stats_section" ${s.show_stats_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_stats_section">Show live stats section</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_brands_section" ${s.show_brands_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_brands_section">Show brands section</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_how_it_works_section" ${s.show_how_it_works_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_how_it_works_section">Show how it works section</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_bengali_usecase_section" ${s.show_bengali_usecase_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_bengali_usecase_section">Show Bengali use-case card</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_whatsapp_section" ${s.show_whatsapp_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_whatsapp_section">Show WhatsApp community section</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_faq_section" ${s.show_faq_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_faq_section">Show FAQ section</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_show_cta_section" ${s.show_cta_section !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="set_show_cta_section">Show final CTA section</label>
+              </div>
+            </div>
             <div class="col-md-6">
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="set_show_recent_domains" ${s.show_recent_domains !== false ? 'checked' : ''}>
-                <label class="form-check-label" for="set_show_recent_domains">Show recent domains on homepage</label>
+                <label class="form-check-label" for="set_show_recent_domains">Show recent domains section</label>
               </div>
             </div>
           </div>
@@ -624,6 +671,13 @@
         cloudflare_auto_dns: host.querySelector('#set_cloudflare_auto_dns').checked,
         email_registration_enabled: host.querySelector('#set_email_registration').checked,
         show_recent_domains: host.querySelector('#set_show_recent_domains').checked,
+        show_stats_section: host.querySelector('#set_show_stats_section').checked,
+        show_brands_section: host.querySelector('#set_show_brands_section').checked,
+        show_how_it_works_section: host.querySelector('#set_show_how_it_works_section').checked,
+        show_bengali_usecase_section: host.querySelector('#set_show_bengali_usecase_section').checked,
+        show_whatsapp_section: host.querySelector('#set_show_whatsapp_section').checked,
+        show_faq_section: host.querySelector('#set_show_faq_section').checked,
+        show_cta_section: host.querySelector('#set_show_cta_section').checked,
         domain_term_days: parseInt(host.querySelector('#set_term_days').value, 10) || 365,
         domain_renewal_price_bdt: parseInt(host.querySelector('#set_renewal_price').value, 10) || 0,
         theme_primary_hex: themeHex ? '#' + themeHex : '',
@@ -702,21 +756,21 @@
         <div class="card-body">
           <h6 class="fw-semibold mb-3"><i class="bi bi-shield-lock me-2"></i>OAuth Providers</h6>
           <div class="row g-3">
-            <div class="col-lg-4">
+            <div class="col-12 col-md-6 col-xl-4">
               <h6 class="small text-muted mb-2"><i class="bi bi-google me-1"></i>Google</h6>
               <div class="mb-2"><label class="form-label small">Client ID</label>
                 <input type="text" class="form-control form-control-sm" id="int_google_id" value="${App.escapeHtml(intVal(v, 'oauth.google.client_id'))}"></div>
               ${secretField('int_google_secret', 'Client Secret', v, 'oauth.google.client_secret', 'Google client secret')}
               <small class="text-muted">Redirect: <code>${App.escapeHtml(redirects.google || '')}</code></small>
             </div>
-            <div class="col-lg-4">
+            <div class="col-12 col-md-6 col-xl-4">
               <h6 class="small text-muted mb-2"><i class="bi bi-facebook me-1"></i>Facebook</h6>
               <div class="mb-2"><label class="form-label small">Client ID</label>
                 <input type="text" class="form-control form-control-sm" id="int_fb_id" value="${App.escapeHtml(intVal(v, 'oauth.facebook.client_id'))}"></div>
               ${secretField('int_fb_secret', 'Client Secret', v, 'oauth.facebook.client_secret', 'Facebook client secret')}
               <small class="text-muted">Redirect: <code>${App.escapeHtml(redirects.facebook || '')}</code></small>
             </div>
-            <div class="col-lg-4">
+            <div class="col-12 col-md-6 col-xl-4">
               <h6 class="small text-muted mb-2"><i class="bi bi-github me-1"></i>GitHub</h6>
               <div class="mb-2"><label class="form-label small">Client ID</label>
                 <input type="text" class="form-control form-control-sm" id="int_gh_id" value="${App.escapeHtml(intVal(v, 'oauth.github.client_id'))}"></div>
@@ -732,29 +786,29 @@
         <div class="card-body">
           <h6 class="fw-semibold mb-3"><i class="bi bi-cloud me-2"></i>Cloudflare DNS</h6>
           <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-12 col-md-6">
               ${secretField('int_cf_token', 'API Token', v, 'cloudflare.api_token', 'Cloudflare API token')}
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
               <label class="form-label small fw-semibold">Zone ID (institution.bd)</label>
               <input type="text" class="form-control form-control-sm" id="int_cf_zone_inst" value="${App.escapeHtml(intVal(v, 'cloudflare.zones.institution_bd'))}">
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
               <label class="form-label small fw-semibold">Zone ID (smartschool.bd)</label>
               <input type="text" class="form-control form-control-sm" id="int_cf_zone_ss" value="${App.escapeHtml(intVal(v, 'cloudflare.zones.smartschool_bd'))}">
             </div>
-            <div class="col-md-4">
+            <div class="col-6 col-md-4">
               <label class="form-label small fw-semibold">Target type</label>
               <select class="form-select form-select-sm" id="int_cf_target_type">
                 <option value="CNAME" ${intVal(v,'cloudflare.target_type')==='CNAME'?'selected':''}>CNAME</option>
                 <option value="A" ${intVal(v,'cloudflare.target_type')==='A'?'selected':''}>A</option>
               </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
               <label class="form-label small fw-semibold">Target value</label>
               <input type="text" class="form-control form-control-sm" id="int_cf_target_val" value="${App.escapeHtml(intVal(v, 'cloudflare.target_value'))}" placeholder="e.g. your-server.example.com">
             </div>
-            <div class="col-md-4 d-flex align-items-end gap-3">
+            <div class="col-6 col-md-4 d-flex align-items-end gap-3">
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="int_cf_proxied" ${intVal(v,'cloudflare.proxied')==='1'?'checked':''}>
                 <label class="form-check-label small" for="int_cf_proxied">Proxied</label>
@@ -800,13 +854,13 @@
         <div class="card-body">
           <h6 class="fw-semibold mb-3"><i class="bi bi-telegram me-2"></i>Telegram Notifications</h6>
           <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-12 col-md-6">
               ${secretField('int_tg_token', 'Bot Token', v, 'telegram.bot_token', 'Your Telegram bot token')}
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
               ${secretField('int_tg_chat_id', 'Chat ID', v, 'telegram.chat_id', '-1001234567890')}
             </div>
-            <div class="col-md-2 d-flex align-items-end">
+            <div class="col-12 col-md-2 d-flex align-items-end">
               <button class="btn btn-outline-primary btn-sm w-100" data-tg-test><i class="bi bi-send me-1"></i>Test</button>
             </div>
           </div>
@@ -820,30 +874,30 @@
         <div class="card-body">
           <h6 class="fw-semibold mb-3"><i class="bi bi-envelope me-2"></i>Email / SMTP</h6>
           <div class="row g-3">
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
               <label class="form-label small fw-semibold">Transport</label>
               <select class="form-select form-select-sm" id="int_mail_transport">
                 <option value="smtp" ${intVal(v,'mail.transport')==='smtp'?'selected':''}>SMTP</option>
                 <option value="mail" ${intVal(v,'mail.transport')==='mail'?'selected':''}>PHP mail()</option>
               </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
               <label class="form-label small fw-semibold">From email</label>
               <input type="email" class="form-control form-control-sm" id="int_mail_from_email" value="${App.escapeHtml(intVal(v, 'mail.from_email'))}">
             </div>
-            <div class="col-md-5">
+            <div class="col-12 col-md-5">
               <label class="form-label small fw-semibold">From name</label>
               <input type="text" class="form-control form-control-sm" id="int_mail_from_name" value="${App.escapeHtml(intVal(v, 'mail.from_name'))}">
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
               <label class="form-label small fw-semibold">SMTP host</label>
               <input type="text" class="form-control form-control-sm" id="int_smtp_host" value="${App.escapeHtml(intVal(v, 'mail.smtp_host'))}" placeholder="smtp.gmail.com">
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-2">
               <label class="form-label small fw-semibold">Port</label>
               <input type="number" class="form-control form-control-sm" id="int_smtp_port" value="${App.escapeHtml(intVal(v, 'mail.smtp_port'))}" placeholder="587">
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-2">
               <label class="form-label small fw-semibold">Secure</label>
               <select class="form-select form-select-sm" id="int_smtp_secure">
                 <option value="" ${intVal(v,'mail.smtp_secure')===''?'selected':''}>None</option>
@@ -851,11 +905,11 @@
                 <option value="ssl" ${intVal(v,'mail.smtp_secure')==='ssl'?'selected':''}>SSL</option>
               </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
               <label class="form-label small fw-semibold">SMTP user</label>
               <input type="text" class="form-control form-control-sm" id="int_smtp_user" value="${App.escapeHtml(intVal(v, 'mail.smtp_user'))}">
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
               ${secretField('int_smtp_pass', 'SMTP password', v, 'mail.smtp_pass', 'SMTP password')}
             </div>
           </div>

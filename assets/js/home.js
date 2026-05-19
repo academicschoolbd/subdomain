@@ -262,6 +262,39 @@
     });
   }
 
+  // ─── Homepage Section Visibility ─────────────────────────────────────────────
+
+  function applyHomepageSectionVisibility(platform) {
+    if (platform.show_stats_section === false) {
+      const el = document.getElementById('live-stats');
+      if (el) el.hidden = true;
+    }
+    if (platform.show_brands_section === false) {
+      const el = document.getElementById('brands');
+      if (el) el.hidden = true;
+    }
+    if (platform.show_how_it_works_section === false) {
+      const el = document.getElementById('how');
+      if (el) el.hidden = true;
+    }
+    if (platform.show_bengali_usecase_section === false) {
+      const el = document.getElementById('use-cases');
+      if (el) el.hidden = true;
+    }
+    if (platform.show_whatsapp_section === false) {
+      const el = document.getElementById('community');
+      if (el) el.hidden = true;
+    }
+    if (platform.show_faq_section === false) {
+      const el = document.getElementById('faq');
+      if (el) el.hidden = true;
+    }
+    if (platform.show_cta_section === false) {
+      const el = document.getElementById('cta');
+      if (el) el.hidden = true;
+    }
+  }
+
   // ─── Featured Directory Preview ────────────────────────────────────────────
 
   async function loadFeatured() {
@@ -271,7 +304,12 @@
     // Check admin setting: hide entire section if disabled
     try {
       const settings = await App.api('/settings');
-      if (settings?.platform?.show_recent_domains === false) {
+      const platform = settings?.platform || {};
+
+      // Apply homepage section visibility
+      applyHomepageSectionVisibility(platform);
+
+      if (platform.show_recent_domains === false) {
         const section = host.closest('section');
         if (section) section.hidden = true;
         return;

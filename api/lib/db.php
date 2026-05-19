@@ -587,6 +587,14 @@ function settings_defaults(): array
         // v5pro — toggle visibility of the "Recent Registered Domains"
         // section on the homepage. Default ON (shown).
         'show_recent_domains'  => '1',
+        // v5pro — toggle visibility of individual homepage sections.
+        'show_stats_section'          => '1',
+        'show_brands_section'         => '1',
+        'show_how_it_works_section'   => '1',
+        'show_bengali_usecase_section'=> '1',
+        'show_whatsapp_section'       => '1',
+        'show_faq_section'            => '1',
+        'show_cta_section'            => '1',
         // v4.5 — admin-controllable brand / home theme color. The hex is
         // applied to every page via an inline <style> block emitted in
         // <head>, overriding style.css's :root --c-primary tokens. Empty
