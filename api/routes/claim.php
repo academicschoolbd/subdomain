@@ -117,13 +117,34 @@ function route_claim_submit(array $CONFIG): void
     $existing = $stmt->fetch();
     $now = db_now($CONFIG);
 
-    // v3.0 — settings-driven mode. When require_documents is OFF (default),
-    // the claim auto-verifies and DNS is created right away. When ON, the
-    // claim lands in "pending" and the admin must approve as before.
-    $requireDocs = settings_get_bool($CONFIG, 'require_documents', false);
+    // v4.1 — *Two* independent toggles drive the claim flow:
+    //
+    //   require_approval = ON  → claim lands as 'pending' and an admin must
+    //                            approve before DNS is published. Default ON.
+    //   require_approval = OFF → claim auto-verifies and Cloudflare DNS is
+    //                            created on the spot (the v3.0 instant-claim
+    //                            flow). The expires_at clock starts now.
+    //
+    //   require_documents      → independently controls whether the wizard
+    //                            *prompts* the owner to upload verification
+    //                            docs. It does NOT force pending status by
+    //                            itself — admins can require approval without
+    //                            requiring docs, or vice versa.
+    //
+    // Pre-v4.1 installs only have `require_documents`. We mirror its value
+    // onto `require_approval` for the first read so behaviour is preserved
+    // for upgrades that haven't yet visited the new admin settings pane.
+    $requireApproval = settings_get_bool($CONFIG, 'require_approval',
+        settings_get_bool($CONFIG, 'require_documents', true));
     $autoDns     = settings_get_bool($CONFIG, 'cloudflare_auto_dns', true);
-    $initStatus  = $requireDocs ? 'pending' : 'verified';
-    $verifiedAt  = $requireDocs ? null : $now;
+    $termDays    = max(1, settings_get_int($CONFIG, 'domain_term_days', 365));
+    $initStatus  = $requireApproval ? 'pending' : 'verified';
+    $verifiedAt  = $requireApproval ? null : $now;
+    // expires_at is set the moment the domain becomes verified — for the
+    // instant-claim flow that's right now, otherwise the admin's approval
+    // path computes it (see route_admin_decide).
+    $expiresAt   = $requireApproval ? null
+        : date('Y-m-d H:i:s', strtotime($now) + $termDays * 86400);
 
     if ($existing) {
         if ($existing['status'] !== 'seeded') {
@@ -137,13 +158,13 @@ function route_claim_submit(array $CONFIG): void
                 district = COALESCE(?, district), upazila = COALESCE(?, upazila),
                 address = ?, eiin = ?, contact_name = ?, contact_phone = ?,
                 contact_email = ?, website = ?, about_bn = ?, about_en = ?,
-                status = ?, verified_at = ?, owner_user_id = ?
+                status = ?, verified_at = ?, expires_at = ?, owner_user_id = ?
              WHERE id = ?'
         )->execute([
             $name_en ?: null, $name_bn ?: null, $category ?: null, $division ?: null,
             $district ?: null, $upazila ?: null, $address, $eiin, $contact_name,
             $contact_phone, $contact_email, $website, $about_bn, $about_en,
-            $initStatus, $verifiedAt,
+            $initStatus, $verifiedAt, $expiresAt,
             (int)$u['id'], (int)$existing['id'],
         ]);
         $instId = (int)$existing['id'];
@@ -153,20 +174,20 @@ function route_claim_submit(array $CONFIG): void
             'INSERT INTO institutions
               (brand, slug, name_en, name_bn, category, division, district, upazila,
                address, eiin, contact_name, contact_phone, contact_email, website,
-               about_bn, about_en, status, owner_user_id, created_at, verified_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+               about_bn, about_en, status, owner_user_id, created_at, verified_at, expires_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $brand, $slug, $name_en, $name_bn ?: null, $category, $division, $district, $upazila,
             $address, $eiin, $contact_name, $contact_phone, $contact_email, $website,
-            $about_bn, $about_en, $initStatus, (int)$u['id'], $now, $verifiedAt,
+            $about_bn, $about_en, $initStatus, (int)$u['id'], $now, $verifiedAt, $expiresAt,
         ]);
         $instId = (int)$pdo->lastInsertId();
         audit($CONFIG, (int)$u['id'], $instId, 'claim.create',
-              json_encode(['brand' => $brand, 'slug' => $slug, 'auto_verified' => !$requireDocs]));
+              json_encode(['brand' => $brand, 'slug' => $slug, 'auto_verified' => !$requireApproval]));
     }
 
     // If auto-verify is on, fire Cloudflare DNS right away (best-effort).
-    if (!$requireDocs && $autoDns) {
+    if (!$requireApproval && $autoDns) {
         $cf = cf_create_record($CONFIG, $brand, $slug);
         $dnsStatus = $cf['attempted'] ? ($cf['ok'] ? 'live' : 'error') : 'manual';
         $pdo->prepare(
@@ -182,11 +203,19 @@ function route_claim_submit(array $CONFIG): void
 
     $stmt = $pdo->prepare('SELECT * FROM institutions WHERE id = ?');
     $stmt->execute([$instId]);
-    send_json(['ok' => true, 'claim' => _claim_row($stmt->fetch()), 'auto_verified' => !$requireDocs]);
+    send_json(['ok' => true, 'claim' => _claim_row($stmt->fetch()), 'auto_verified' => !$requireApproval]);
 }
 
 function _claim_row(array $r): array
 {
+    // v4.1 — compute days_to_expiry so the dashboard can show "expires in
+    // 14 days" / "expired 3 days ago" without re-doing date math in JS.
+    $expiresAt = $r['expires_at'] ?? null;
+    $daysToExpiry = null;
+    if (!empty($expiresAt)) {
+        $secs = strtotime((string)$expiresAt) - time();
+        $daysToExpiry = (int)floor($secs / 86400);
+    }
     return [
         'id' => (int)$r['id'],
         'brand' => $r['brand'],
@@ -214,6 +243,8 @@ function _claim_row(array $r): array
         'dns_status' => $r['dns_status'] ?? null,
         'dns_message' => $r['dns_message'] ?? null,
         'verified_at' => $r['verified_at'] ?? null,
+        'expires_at'  => $expiresAt,
+        'days_to_expiry' => $daysToExpiry,
         'created_at' => $r['created_at'] ?? null,
     ];
 }
@@ -280,13 +311,14 @@ function route_claim_withdraw(array $CONFIG, int $instId): void
     // Owners can withdraw while:
     //   - not verified yet (pending / needs_info / rejected), or
     //   - verified via the legacy v3.0 instant-claim flow AND moderation is
-    //     currently OFF (require_documents = 0). When admin moderation is ON
-    //     (the v3.2 default), an approved claim is the admin's call to
+    //     currently OFF (require_approval = 0). When admin moderation is ON
+    //     (the v4.1 default), an approved claim is the admin's call to
     //     suspend, not the owner's.
     // Admins can always withdraw via this route (suspend is the moderation path).
     $statusOk = in_array($inst['status'], ['pending', 'needs_info', 'rejected'], true);
     if (!$statusOk && $inst['status'] === 'verified'
-        && !settings_get_bool($CONFIG, 'require_documents', false)) {
+        && !settings_get_bool($CONFIG, 'require_approval',
+            settings_get_bool($CONFIG, 'require_documents', false))) {
         $cnt = $pdo->prepare('SELECT COUNT(*) c FROM claim_documents WHERE institution_id = ?');
         $cnt->execute([$instId]);
         $statusOk = ((int)$cnt->fetch()['c']) === 0;  // verified-but-doc-less = self-service eligible
@@ -620,4 +652,195 @@ function route_tenant_dns_delete(array $CONFIG, int $instId, int $recId): void
     audit($CONFIG, (int)$u['id'], $instId, 'tenant.dns.delete',
         $row['type'] . ' ' . $row['name']);
     send_json(['ok' => true]);
+}
+
+
+
+/* =================================================================== */
+/*  v4.1 — owner-driven domain renewal                                   */
+/* =================================================================== */
+
+/**
+ * Build a row shape for /tenant/{id}/renew responses + the admin pane.
+ */
+function _renewal_row(array $r): array
+{
+    return [
+        'id'                  => (int)$r['id'],
+        'institution_id'      => (int)$r['institution_id'],
+        'owner_user_id'       => $r['owner_user_id'] !== null ? (int)$r['owner_user_id'] : null,
+        'term_days'           => (int)($r['term_days'] ?? 365),
+        'price_bdt'           => (int)($r['price_bdt'] ?? 0),
+        'status'              => (string)($r['status'] ?? 'pending'),
+        'note'                => $r['note'] ?? null,
+        'owner_message'       => $r['owner_message'] ?? null,
+        'previous_expires_at' => $r['previous_expires_at'] ?? null,
+        'new_expires_at'      => $r['new_expires_at'] ?? null,
+        'decided_by_user_id'  => $r['decided_by_user_id'] !== null ? (int)$r['decided_by_user_id'] : null,
+        'decided_at'          => $r['decided_at'] ?? null,
+        'created_at'          => $r['created_at'] ?? null,
+    ];
+}
+
+/**
+ * GET /api/tenant/{id}/renew
+ *
+ * Returns the renewal context for this domain — current expiry, computed
+ * "would-be" new expiry, the platform's renewal price, and any pending
+ * renewal request the owner has already submitted (so the dashboard can
+ * show "your renewal is awaiting confirmation" instead of letting them
+ * fire off another one).
+ */
+function route_tenant_renew_info(array $CONFIG, int $instId): void
+{
+    $u = require_user($CONFIG);
+    $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    if ($inst['status'] !== 'verified') {
+        send_error('Only verified domains can be renewed.', 409);
+    }
+    $termDays = max(1, settings_get_int($CONFIG, 'domain_term_days', 365));
+    $price    = max(0, settings_get_int($CONFIG, 'domain_renewal_price_bdt', 0));
+
+    // Always extend from the *later* of (now, current expiry) so a renewal
+    // a few days early doesn't lose calendar time, and a renewal after
+    // expiry restarts the clock from now (no retroactive grace).
+    $base = !empty($inst['expires_at']) && strtotime($inst['expires_at']) > time()
+        ? strtotime($inst['expires_at']) : time();
+    $newExpiresAt = date('Y-m-d H:i:s', $base + $termDays * 86400);
+
+    $pending = null;
+    $stmt = db($CONFIG)->prepare(
+        "SELECT * FROM domain_renewals
+          WHERE institution_id = ? AND status = 'pending'
+       ORDER BY id DESC LIMIT 1"
+    );
+    $stmt->execute([$instId]);
+    $row = $stmt->fetch();
+    if ($row) $pending = _renewal_row($row);
+
+    send_json([
+        'subdomain'          => $inst['slug'] . '.' . $inst['brand'],
+        'expires_at'         => $inst['expires_at'] ?? null,
+        'projected_expires_at' => $newExpiresAt,
+        'term_days'          => $termDays,
+        'price_bdt'          => $price,
+        'pending_renewal'    => $pending,
+    ]);
+}
+
+/**
+ * POST /api/tenant/{id}/renew
+ *
+ * Body: { message?: string }
+ *
+ * Free path (price = 0):
+ *   - extend institutions.expires_at by the configured term right away
+ *   - write a `domain_renewals` row with status='approved' for audit
+ *   - return ok=true and the updated institution row
+ *
+ * Paid path (price > 0):
+ *   - create a `domain_renewals` row with status='pending'
+ *   - return ok=true and the renewal row plus the configured payment
+ *     methods so the dashboard can render the "send X to bKash …" panel
+ *   - admin approves later from /admin → Renewals
+ */
+function route_tenant_renew_request(array $CONFIG, int $instId): void
+{
+    $u = require_user($CONFIG);
+    $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    if ($inst['status'] !== 'verified') {
+        send_error('Only verified domains can be renewed.', 409);
+    }
+
+    $termDays = max(1, settings_get_int($CONFIG, 'domain_term_days', 365));
+    $price    = max(0, settings_get_int($CONFIG, 'domain_renewal_price_bdt', 0));
+
+    $pdo = db($CONFIG);
+    // Reject if there's already a pending renewal — admin must decide it
+    // first to avoid duplicate "I paid twice" confusion.
+    $existing = $pdo->prepare(
+        "SELECT id FROM domain_renewals WHERE institution_id = ? AND status = 'pending' LIMIT 1"
+    );
+    $existing->execute([$instId]);
+    if ($existing->fetch()) {
+        send_error('A renewal request is already pending for this domain.', 409);
+    }
+
+    $data = read_json_body();
+    $msg = trim((string)($data['message'] ?? ''));
+    if (mb_strlen($msg) > 1000) $msg = mb_substr($msg, 0, 1000);
+
+    $now  = db_now($CONFIG);
+    $base = !empty($inst['expires_at']) && strtotime($inst['expires_at']) > time()
+        ? strtotime($inst['expires_at']) : time();
+    $newExpiresAt = date('Y-m-d H:i:s', $base + $termDays * 86400);
+
+    if ($price <= 0) {
+        // Free renewal — extend immediately and audit.
+        $pdo->prepare('UPDATE institutions SET expires_at = ? WHERE id = ?')
+            ->execute([$newExpiresAt, $instId]);
+        $pdo->prepare(
+            "INSERT INTO domain_renewals
+              (institution_id, owner_user_id, term_days, price_bdt, status,
+               owner_message, previous_expires_at, new_expires_at,
+               decided_by_user_id, decided_at, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        )->execute([
+            $instId, (int)$u['id'], $termDays, 0, 'approved',
+            $msg !== '' ? $msg : null,
+            $inst['expires_at'] ?? null, $newExpiresAt,
+            (int)$u['id'], $now, $now,
+        ]);
+        audit($CONFIG, (int)$u['id'], $instId, 'tenant.renew.auto',
+            json_encode(['term_days' => $termDays, 'new_expires_at' => $newExpiresAt]));
+        $sel = $pdo->prepare('SELECT * FROM institutions WHERE id = ?');
+        $sel->execute([$instId]);
+        send_json([
+            'ok'           => true,
+            'auto_renewed' => true,
+            'institution'  => _claim_row($sel->fetch()),
+        ]);
+        return;
+    }
+
+    // Paid path: create a pending request. The dashboard will surface the
+    // configured Support-Developer payment methods so the owner can settle
+    // the bill via bKash / Nagad / etc.
+    $pdo->prepare(
+        "INSERT INTO domain_renewals
+          (institution_id, owner_user_id, term_days, price_bdt, status,
+           owner_message, previous_expires_at, new_expires_at, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?)"
+    )->execute([
+        $instId, (int)$u['id'], $termDays, $price, 'pending',
+        $msg !== '' ? $msg : null,
+        $inst['expires_at'] ?? null, $newExpiresAt, $now,
+    ]);
+    $rid = (int)$pdo->lastInsertId();
+    audit($CONFIG, (int)$u['id'], $instId, 'tenant.renew.request',
+        json_encode(['renewal_id' => $rid, 'price_bdt' => $price]));
+
+    $sel = $pdo->prepare('SELECT * FROM domain_renewals WHERE id = ?');
+    $sel->execute([$rid]);
+    send_json([
+        'ok'           => true,
+        'auto_renewed' => false,
+        'renewal'      => _renewal_row($sel->fetch()),
+    ]);
+}
+
+/**
+ * GET /api/tenant/{id}/renewals — owner-side renewal history (most recent
+ * first, includes pending + approved + rejected).
+ */
+function route_tenant_renewals_list(array $CONFIG, int $instId): void
+{
+    $u = require_user($CONFIG);
+    _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
+    $stmt = db($CONFIG)->prepare(
+        'SELECT * FROM domain_renewals WHERE institution_id = ? ORDER BY id DESC'
+    );
+    $stmt->execute([$instId]);
+    $items = array_map('_renewal_row', $stmt->fetchAll());
+    send_json(['items' => $items]);
 }

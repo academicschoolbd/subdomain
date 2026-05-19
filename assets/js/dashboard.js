@@ -248,6 +248,35 @@
     return `<span class="badge ${cls}">${App.escapeHtml(label)}</span>`;
   }
 
+  /* v4.1 — render the "Expires At" cell + Renew button.
+     Three colour states:
+       expired (days < 0)        → red badge, Renew is primary CTA
+       expiring soon (days ≤ 30) → amber badge, Renew is offered
+       healthy (days > 30)       → muted text, Renew is shown as ghost
+     Pre-v4.1 verified rows (no expires_at) keep the old "Free · no expiry"
+     copy so existing installs don't suddenly look broken. */
+  function expiryCell(c) {
+    if (c.status !== 'verified') return '<span class="text-muted">—</span>';
+    if (!c.expires_at) return '<span class="text-muted">Free · no expiry</span>';
+    const d  = App.fmtDate(c.expires_at);
+    const dt = c.days_to_expiry;
+    if (dt == null) return App.escapeHtml(d);
+    if (dt < 0)    return `<span class="badge badge--danger" title="${App.escapeHtml(d)}">Expired ${-dt}d ago</span>`;
+    if (dt <= 30)  return `<span class="badge badge--warning" title="${App.escapeHtml(d)}">In ${dt}d · ${App.escapeHtml(d)}</span>`;
+    return `<span class="text-muted" title="In ${dt} days">${App.escapeHtml(d)}</span>`;
+  }
+  function renewButton(c) {
+    if (c.status !== 'verified') return '';
+    if (!c.expires_at) return '';            // legacy "no expiry" claim
+    const dt = c.days_to_expiry;
+    // Always allow renewal — a customer should be able to top up early too.
+    // Visual emphasis follows dt: expired/<7d → primary, ≤30d → outline, else ghost.
+    const cls = (dt != null && dt < 0)         ? 'btn--primary'
+              : (dt != null && dt <= 7)        ? 'btn--primary'
+              : (dt != null && dt <= 30)       ? 'btn--outline'
+              :                                  'btn--ghost';
+    return `<button class="btn btn--sm ${cls}" type="button" data-renew="${c.id}">Renew</button>`;
+  }
   function renderDomainsTable() {
     const tbody = document.querySelector('[data-domains-body]');
     if (!tbody) return;
@@ -278,9 +307,6 @@
     }
 
     tbody.innerHTML = rows.map((c) => {
-      const expires = c.verified_at
-        ? '<span class="text-muted">Free · no expiry</span>'
-        : '<span class="text-muted">—</span>';
       return `
         <tr data-row="${c.id}">
           <td>
@@ -294,12 +320,13 @@
           </td>
           <td>${statusPill(c.status)}</td>
           <td>${App.escapeHtml(App.fmtDate(c.created_at))}</td>
-          <td>${expires}</td>
+          <td>${expiryCell(c)}</td>
           <td class="text-right">
             <div class="dash-row-actions">
               ${c.status === 'verified'
                 ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(c.subdomain)}">Open</a>`
                 : ''}
+              ${renewButton(c)}
               <button class="btn btn--sm" type="button" data-manage="${c.id}">Manage</button>
             </div>
           </td>
@@ -308,6 +335,9 @@
 
     tbody.querySelectorAll('[data-manage]').forEach((b) => {
       b.addEventListener('click', () => openManage(parseInt(b.getAttribute('data-manage'), 10)));
+    });
+    tbody.querySelectorAll('[data-renew]').forEach((b) => {
+      b.addEventListener('click', () => openRenewModal(parseInt(b.getAttribute('data-renew'), 10)));
     });
   }
 
@@ -1109,6 +1139,193 @@
         } else {
           App.toast((err && err.detail) || 'Save failed', 'error');
         }
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v4.1 — Domain renewal flow (free auto-extend / paid request)     */
+  /* ---------------------------------------------------------------- */
+
+  /** Format a date like "12 May 2026" (locale-aware, avoids parseDate). */
+  function _shortDate(s) {
+    if (!s) return '—';
+    const d = new Date(String(s).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return App.escapeHtml(String(s));
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  async function openRenewModal(id) {
+    const c = _claims.find((x) => x.id === id);
+    if (!c) { App.toast('Could not find that domain', 'error'); return; }
+    // Re-use the manage modal as the surface — same DOM, fresh body.
+    if (!manageBg || !manageBody) return;
+    manageBg.classList.add('open');
+    manageBody.innerHTML = '<div class="skeleton" style="height:160px;"></div>';
+
+    // Pull the live renewal context (price + projected new expiry +
+    // whether there's already a pending request) and the configured
+    // payment methods in parallel.
+    let info = null, payments = [];
+    try {
+      info = await App.api('/tenant/' + id + '/renew');
+    } catch (e) {
+      manageBody.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Could not load renewal info') + '</p>';
+      return;
+    }
+    if (info.price_bdt > 0) {
+      try { const p = await App.api('/support/payments'); payments = (p && p.items) || []; }
+      catch { payments = []; }
+    }
+
+    renderRenewModal(c, info, payments);
+  }
+
+  function renderRenewModal(c, info, payments) {
+    const isPaid    = (info.price_bdt || 0) > 0;
+    const pending   = info.pending_renewal;
+    const close     = manageBody.querySelector('[data-manage-close-2]');
+    const expiresIn = info.expires_at
+      ? '<strong>' + _shortDate(info.expires_at) + '</strong>'
+      : '<span class="text-muted">no expiry on file</span>';
+    const projected = '<strong>' + _shortDate(info.projected_expires_at) + '</strong>';
+
+    // ---------- Already-pending state ----------
+    if (pending) {
+      manageBody.innerHTML = `
+        <header class="manage-head">
+          <h2 style="margin:0;">Renewal pending — ${App.escapeHtml(info.subdomain)}</h2>
+          <p class="text-muted" style="margin:.2em 0;">A renewal request was submitted on ${_shortDate(pending.created_at)}. The admin will mark it approved once your payment is confirmed.</p>
+        </header>
+        <div class="renew-card mt-3">
+          <div class="renew-card__row"><span>Status</span><span><span class="badge badge--warning">Awaiting confirmation</span></span></div>
+          <div class="renew-card__row"><span>Amount</span><span><strong>${pending.price_bdt > 0 ? '৳ ' + pending.price_bdt : 'Free'}</strong></span></div>
+          <div class="renew-card__row"><span>Current expiry</span><span>${expiresIn}</span></div>
+          <div class="renew-card__row"><span>New expiry on approval</span><span>${projected}</span></div>
+          ${pending.owner_message ? `<div class="renew-card__row"><span>Your note</span><span class="text-muted" style="font-style:italic;">${App.escapeHtml(pending.owner_message)}</span></div>` : ''}
+        </div>
+        <footer class="manage-foot mt-4">
+          <span></span>
+          <button class="btn" type="button" data-manage-close-2>Close</button>
+        </footer>`;
+      manageBody.querySelector('[data-manage-close-2]').addEventListener('click', closeManage);
+      return;
+    }
+
+    // ---------- Free auto-renew ----------
+    if (!isPaid) {
+      manageBody.innerHTML = `
+        <header class="manage-head">
+          <h2 style="margin:0;">Renew ${App.escapeHtml(info.subdomain)}</h2>
+          <p class="text-muted" style="margin:.2em 0;">Renewals are <strong>free</strong> on this platform. One click extends the term by ${info.term_days} days.</p>
+        </header>
+        <div class="renew-card mt-3">
+          <div class="renew-card__row"><span>Current expiry</span><span>${expiresIn}</span></div>
+          <div class="renew-card__row"><span>New expiry</span><span>${projected}</span></div>
+          <div class="renew-card__row"><span>Term</span><span>${info.term_days} days</span></div>
+          <div class="renew-card__row"><span>Price</span><span><strong>Free</strong></span></div>
+        </div>
+        <form data-renew-form="${c.id}" class="form-grid mt-3">
+          <div class="field field--wide">
+            <label class="label">Note (optional)</label>
+            <textarea name="message" rows="2" placeholder="Anything we should know? Leave blank to skip."></textarea>
+          </div>
+          <div class="field field--wide flex-between">
+            <button class="btn" type="button" data-manage-close-2>Cancel</button>
+            <button class="btn btn--primary" type="submit" data-renew-go>Renew now</button>
+          </div>
+        </form>`;
+      _wireRenewSubmit(c.id);
+      manageBody.querySelectorAll('[data-manage-close-2]').forEach((b) => b.addEventListener('click', closeManage));
+      return;
+    }
+
+    // ---------- Paid renewal — show payment instructions ----------
+    const PAY_BRAND = {
+      bkash:'bKash', nagad:'Nagad', rocket:'Rocket', upay:'Upay', tap:'Tap',
+      bank:'Bank', card:'Card', paypal:'PayPal', crypto:'Crypto', other:'Other',
+    };
+    const visiblePayments = (payments || []).filter((p) => p.number || p.note || p.qr_url);
+    manageBody.innerHTML = `
+      <header class="manage-head">
+        <h2 style="margin:0;">Renew ${App.escapeHtml(info.subdomain)}</h2>
+        <p class="text-muted" style="margin:.2em 0;">Pay ৳ ${info.price_bdt} via any of the methods below, then submit the request. The admin will confirm your payment and extend the expiry.</p>
+      </header>
+      <div class="renew-card mt-3">
+        <div class="renew-card__row"><span>Current expiry</span><span>${expiresIn}</span></div>
+        <div class="renew-card__row"><span>New expiry on approval</span><span>${projected}</span></div>
+        <div class="renew-card__row"><span>Term</span><span>${info.term_days} days</span></div>
+        <div class="renew-card__row"><span>Amount due</span><span><strong>৳ ${info.price_bdt}</strong></span></div>
+      </div>
+
+      <h4 class="mt-4">Pay with</h4>
+      ${visiblePayments.length ? `
+        <div class="pay-grid renew-pay-grid">
+          ${visiblePayments.map((p) => `
+            <div class="pay-card">
+              <header class="pay-card__head">
+                <span class="pay-card__pill" style="background:#0f766e;">${App.escapeHtml(PAY_BRAND[p.method] || p.method)}</span>
+                <strong>${App.escapeHtml(p.label)}</strong>
+              </header>
+              ${p.number ? `
+                <div class="pay-card__num">
+                  <code>${App.escapeHtml(p.number)}</code>
+                  <button type="button" class="btn btn--sm" data-copy="${App.escapeHtml(p.number)}">Copy</button>
+                </div>` : ''}
+              ${p.note ? `<p class="pay-card__note">${App.escapeHtml(p.note)}</p>` : ''}
+              ${p.qr_url ? `<a class="pay-card__qr" href="${App.escapeHtml(p.qr_url)}" target="_blank" rel="noopener">View QR →</a>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      ` : '<p class="text-muted">No payment methods are currently configured by the admin. Please contact support.</p>'}
+
+      <form data-renew-form="${c.id}" class="form-grid mt-3">
+        <div class="field field--wide">
+          <label class="label">Transaction reference (recommended)</label>
+          <textarea name="message" rows="2" placeholder="e.g. bKash TrxID: 9X8A2B1C — paid ৳ ${info.price_bdt} on …"></textarea>
+        </div>
+        <div class="field field--wide flex-between">
+          <button class="btn" type="button" data-manage-close-2>Cancel</button>
+          <button class="btn btn--primary" type="submit" data-renew-go>I've paid — submit request</button>
+        </div>
+      </form>`;
+    _wireRenewSubmit(c.id);
+    manageBody.querySelectorAll('[data-copy]').forEach((b) => {
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const txt = b.getAttribute('data-copy') || '';
+        try { await navigator.clipboard.writeText(txt); App.toast('Copied "' + txt + '"', 'success'); }
+        catch { App.toast('Could not copy', 'error'); }
+      });
+    });
+    manageBody.querySelectorAll('[data-manage-close-2]').forEach((b) => b.addEventListener('click', closeManage));
+  }
+
+  function _wireRenewSubmit(claimId) {
+    const form = manageBody.querySelector('[data-renew-form="' + claimId + '"]');
+    if (!form) return;
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const message = (fd.get('message') || '').toString().trim();
+      const btn = form.querySelector('[data-renew-go]');
+      const orig = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+      try {
+        const r = await App.api('/tenant/' + claimId + '/renew', {
+          method: 'POST', body: { message },
+        });
+        if (r.auto_renewed) {
+          App.toast('Renewed! New expiry saved.', 'success');
+        } else {
+          App.toast('Renewal request submitted — the admin will confirm shortly.', 'success');
+        }
+        closeManage();
+        loadDomains();
+      } catch (e) {
+        App.toast((e && e.detail) || 'Could not submit renewal', 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
       }
     });
   }

@@ -66,6 +66,11 @@ $routes = [
     ['PATCH',  '#^tenant/(?P<id>\d+)/dns/(?P<rid>\d+)$#',                    'route_tenant_dns_update'],
     ['DELETE', '#^tenant/(?P<id>\d+)/dns/(?P<rid>\d+)$#',                    'route_tenant_dns_delete'],
 
+    // v4.1 — owner renewal flow.
+    ['GET',    '#^tenant/(?P<id>\d+)/renew$#',                               'route_tenant_renew_info'],
+    ['POST',   '#^tenant/(?P<id>\d+)/renew$#',                               'route_tenant_renew_request'],
+    ['GET',    '#^tenant/(?P<id>\d+)/renewals$#',                            'route_tenant_renewals_list'],
+
     // v3.2 — public payment methods (visible-only) for "Support Developer" pane.
     ['GET',    '#^support/payments$#',                                       'route_public_support_payments'],
 
@@ -75,6 +80,8 @@ $routes = [
     ['POST',   '#^admin/claims/(?P<id>\d+)/decide$#',                        'route_admin_decide'],
     ['POST',   '#^admin/claims/(?P<id>\d+)/dns-retry$#',                     'route_admin_dns_retry'],
     ['GET',    '#^admin/documents/(?P<id>\d+)$#',                            'route_admin_doc_download'],
+    ['DELETE', '#^admin/documents/(?P<id>\d+)$#',                            'route_admin_doc_delete'],
+    ['PATCH',  '#^admin/documents/(?P<id>\d+)$#',                            'route_admin_doc_patch'],
     ['GET',    '#^admin/reserved-slugs$#',                                   'route_admin_reserved_list'],
     ['POST',   '#^admin/reserved-slugs$#',                                   'route_admin_reserved_add'],
     ['DELETE', '#^admin/reserved-slugs/(?P<id>\d+)$#',                       'route_admin_reserved_delete'],
@@ -98,6 +105,11 @@ $routes = [
     ['POST',   '#^admin/support/payments$#',                                 'route_admin_support_payments_create'],
     ['PATCH',  '#^admin/support/payments/(?P<id>\d+)$#',                     'route_admin_support_payments_update'],
     ['DELETE', '#^admin/support/payments/(?P<id>\d+)$#',                     'route_admin_support_payments_delete'],
+
+    // v4.1 — admin claim-extend + renewals queue.
+    ['POST',   '#^admin/claims/(?P<id>\d+)/extend$#',                        'route_admin_claim_extend'],
+    ['GET',    '#^admin/renewals$#',                                         'route_admin_renewals_list'],
+    ['POST',   '#^admin/renewals/(?P<id>\d+)/decide$#',                      'route_admin_renewal_decide'],
 
     ['GET',    '#^sitemap\.xml$#',                                           'route_public_sitemap'],
 ];

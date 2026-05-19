@@ -98,28 +98,36 @@
       <!-- =================== MAIN =================== -->
       <main class="dash-main">
 
-        <!-- Stay-connected banner — shown on every pane like ready.bd. -->
-        <section class="dash-banner" data-banner>
-          <span class="dash-banner__ico" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </span>
-          <div class="dash-banner__body">
-            <h3 data-banner-title>Stay Connected with institution.bd</h3>
-            <p data-banner-sub>Join our community for support, tips &amp; updates. Like our page to never miss new features!</p>
+        <!-- Stay-connected banner — v4.1 modern glass card with mesh gradient. -->
+        <section class="connect-band" data-banner>
+          <div class="connect-band__bg" aria-hidden="true">
+            <span class="connect-band__blob connect-band__blob--a"></span>
+            <span class="connect-band__blob connect-band__blob--b"></span>
+            <span class="connect-band__blob connect-band__blob--c"></span>
           </div>
-          <div class="dash-banner__cta">
-            <a class="btn btn--primary" data-banner-community href="#" target="_blank" rel="noopener">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Join Our Community
-            </a>
-            <a class="btn" data-banner-like href="#" target="_blank" rel="noopener">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              Like Our Page
-            </a>
-            <a class="btn btn--gradient" data-banner-creator href="#" target="_blank" rel="noopener">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              <span data-banner-creator-text>Follow Creator</span>
-            </a>
+          <div class="connect-band__inner">
+            <div class="connect-band__lead">
+              <span class="connect-band__pill" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                <span>Stay connected</span>
+              </span>
+              <h3 class="connect-band__title" data-banner-title>Stay Connected with institution.bd</h3>
+              <p class="connect-band__sub" data-banner-sub>Get announcements, support and meet other institution owners.</p>
+            </div>
+            <div class="connect-band__cta">
+              <a class="btn btn--primary connect-band__btn" data-banner-community href="#" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Join Our Community
+              </a>
+              <a class="btn connect-band__btn connect-band__btn--like" data-banner-like href="#" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                Like Our Page
+              </a>
+              <a class="btn btn--gradient connect-band__btn connect-band__btn--creator" data-banner-creator href="#" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                <span data-banner-creator-text>Follow Creator</span>
+              </a>
+            </div>
           </div>
         </section>
 

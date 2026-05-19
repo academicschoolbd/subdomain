@@ -78,6 +78,7 @@
     if (name === 'settings')     loadSettings();
     if (name === 'integrations') loadIntegrations();
     if (name === 'payments')     loadAdminPayments();
+    if (name === 'renewals')     loadRenewals();
   }
 
   function wirePaneSwitcher() {
@@ -132,21 +133,23 @@
         navBadge.hidden = p === 0;
       }
       // Update the banner copy when moderation is OFF (so admins know they
-      // are running in instant-claim mode).
+      // are running in instant-claim mode). v4.1 — read the new
+      // require_approval toggle (legacy installs surface require_documents
+      // as a fallback, see route_admin_settings_get).
       App.api('/admin/settings').then((s) => {
-        const reqDocs = !!(s && s.settings && s.settings.require_documents);
+        const reqApproval = !!(s && s.settings && s.settings.require_approval);
         const t = document.querySelector('[data-admin-banner-title]');
         const sub = document.querySelector('[data-admin-banner-sub]');
         const banner = document.querySelector('[data-admin-banner]');
-        if (banner) banner.classList.toggle('dash-banner--warn', !reqDocs);
+        if (banner) banner.classList.toggle('dash-banner--warn', !reqApproval);
         if (t) {
-          t.textContent = reqDocs
+          t.textContent = reqApproval
             ? 'Moderation is ON — every claim waits for your approval.'
             : 'Moderation is OFF — claims auto-verify on submit.';
         }
         if (sub) {
-          sub.innerHTML = reqDocs
-            ? 'New subdomains land as <code>pending</code> and stay private until you approve them. You can flip moderation OFF in Platform settings to restore the v3.0 instant-claim flow.'
+          sub.innerHTML = reqApproval
+            ? 'New subdomains land as <code>pending</code> and stay private until you approve them. You can flip moderation OFF in <strong>Platform settings</strong> to restore the v3.0 instant-claim flow.'
             : 'Every claim goes <code>verified</code> immediately and Cloudflare publishes a record on the spot. Flip moderation back ON in <strong>Platform settings</strong> if abuse appears.';
         }
       }).catch(() => { /* keep default banner */ });
@@ -440,6 +443,15 @@
     const c = r.institution;
     const docs = r.documents || [];
     const owner = r.owner;
+    const expiryHtml = (() => {
+      if (!c.expires_at) return '—';
+      const d  = App.fmtDate(c.expires_at);
+      const dt = c.days_to_expiry;
+      if (dt == null) return App.escapeHtml(d);
+      if (dt < 0)  return `${App.escapeHtml(d)} <span class="badge badge--danger">expired ${-dt}d ago</span>`;
+      if (dt <= 30) return `${App.escapeHtml(d)} <span class="badge badge--warning">in ${dt}d</span>`;
+      return `${App.escapeHtml(d)} <span class="text-muted">(in ${dt}d)</span>`;
+    })();
     const fields = [
       ['Brand', c.brand], ['Slug', c.slug], ['Subdomain', c.subdomain],
       ['Name (EN)', c.name_en], ['Name (BN)', c.name_bn], ['Category', c.category],
@@ -447,20 +459,65 @@
       ['Address', c.address], ['Contact name', c.contact_name],
       ['Contact phone', c.contact_phone], ['Contact email', c.contact_email], ['Website', c.website],
       ['Status', c.status], ['DNS status', c.dns_status || '—'],
+      ['Verified at', c.verified_at ? App.fmtDate(c.verified_at) : '—'],
       ['Owner', owner ? (owner.name || owner.email || ('user#' + owner.id)) : '—'],
     ];
+    const tok = encodeURIComponent(App.getToken() || '');
+    const docTypes = ['eiin_certificate', 'board_letter', 'trade_license', 'nid', 'selfie', 'other'];
     detailBody.innerHTML = `
       <h2 style="margin-top:0;">${App.escapeHtml(c.name_en || c.subdomain)}</h2>
-      <p class="text-muted"><code>${App.escapeHtml(c.subdomain)}</code> · ${statusBadge(c.status)}</p>
+      <p class="text-muted"><code>${App.escapeHtml(c.subdomain)}</code> · ${statusBadge(c.status)}
+        ${c.expires_at ? ' · expires ' + expiryHtml : ''}
+      </p>
       <div class="grid-2 mt-3">
-        <table class="kv">${fields.map(([k, v]) => `<tr><th>${App.escapeHtml(k)}</th><td>${App.escapeHtml(v || '—')}</td></tr>`).join('')}</table>
+        <table class="kv">${fields.map(([k, v]) => `<tr><th>${App.escapeHtml(k)}</th><td>${App.escapeHtml(v || '—')}</td></tr>`).join('')}
+          <tr><th>Expires</th><td>${expiryHtml}</td></tr>
+        </table>
         <div>
-          <h4>Documents</h4>
-          ${docs.length ? docs.map((d) => `<div class="doc-row"><span>📎 ${App.escapeHtml(d.doc_type)} · ${App.escapeHtml(d.filename)}</span><a class="btn btn--sm" target="_blank" rel="noopener" href="/api/admin/documents/${d.id}?_t=${encodeURIComponent(App.getToken() || '')}">View</a></div>`).join('') : '<p class="text-muted">No documents.</p>'}
+          <h4 class="flex-between" style="margin-top:0;">
+            <span>Documents <span class="text-muted" style="font-weight:400;">(${docs.length})</span></span>
+          </h4>
+          ${docs.length
+            ? '<div class="docs-admin">' + docs.map((d) => `
+                <article class="doc-admin" data-doc-row="${d.id}">
+                  <header class="doc-admin__head">
+                    <select class="doc-admin__type" data-doc-type="${d.id}">
+                      ${docTypes.map((t) => `<option value="${t}" ${t === d.doc_type ? 'selected' : ''}>${App.escapeHtml(t)}</option>`).join('')}
+                    </select>
+                    <span class="text-muted doc-admin__name">${App.escapeHtml(d.filename)}</span>
+                    <div class="doc-admin__actions">
+                      <button class="btn btn--ghost btn--sm" type="button" data-doc-toggle="${d.id}" data-mime="${App.escapeHtml(d.content_type || '')}">Preview</button>
+                      <a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="/api/admin/documents/${d.id}?_t=${tok}">Open</a>
+                      <button class="btn btn--ghost btn--sm btn--danger-text" type="button" data-doc-del="${d.id}">Delete</button>
+                    </div>
+                  </header>
+                  <div class="doc-admin__preview" data-doc-preview="${d.id}" hidden></div>
+                </article>
+              `).join('') + '</div>'
+            : '<p class="text-muted">No documents.</p>'}
           ${c.about_en ? `<h4 class="mt-3">About (English)</h4><p>${App.escapeHtml(c.about_en)}</p>` : ''}
           ${c.about_bn ? `<h4 class="mt-3">পরিচিতি</h4><p style="font-family:'Noto Sans Bengali',sans-serif;">${App.escapeHtml(c.about_bn)}</p>` : ''}
         </div>
       </div>
+
+      ${c.status === 'verified' ? `
+        <h4 class="mt-4">Domain expiry</h4>
+        <form data-extend="${c.id}" class="form-grid form-grid--2">
+          <div class="field">
+            <label class="label">Extend by (days)</label>
+            <input name="days" type="number" min="1" max="3650" value="365" />
+            <p class="hint">Leave the absolute date empty and just press <strong>Extend</strong> to bump from the current expiry.</p>
+          </div>
+          <div class="field">
+            <label class="label">Or set absolute expiry (optional)</label>
+            <input name="expires_at" type="text" placeholder="YYYY-MM-DD HH:MM:SS" />
+          </div>
+          <div class="field field--wide text-right">
+            <button class="btn" type="submit">Extend expiry</button>
+          </div>
+        </form>
+      ` : ''}
+
       <h4 class="mt-4">Decision</h4>
       <form data-decide="${c.id}" class="form-grid">
         <div class="field field--wide"><label class="label">Notes (shown to owner)</label><textarea name="notes" rows="2"></textarea></div>
@@ -472,6 +529,8 @@
           ${c.status === 'verified' && c.dns_status !== 'live' ? '<button class="btn btn--sm" data-act="dns-retry" type="button">Retry DNS</button>' : ''}
         </div>
       </form>`;
+
+    // Wire decide buttons.
     const form = detailBody.querySelector('[data-decide]');
     form.querySelectorAll('button[data-act]').forEach((b) => {
       b.addEventListener('click', async () => {
@@ -489,6 +548,70 @@
           loadOverview();
           loadQueue();
         } catch (e2) { App.toast((e2 && e2.detail) || 'Action failed', 'error'); }
+      });
+    });
+
+    // Wire extend form (verified only).
+    const extForm = detailBody.querySelector('[data-extend]');
+    if (extForm) {
+      extForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(extForm);
+        const days = parseInt(fd.get('days') || '0', 10);
+        const abs  = (fd.get('expires_at') || '').toString().trim();
+        const body = {};
+        if (abs) body.expires_at = abs; else body.days = days;
+        try {
+          await App.api('/admin/claims/' + c.id + '/extend', { method: 'POST', body });
+          App.toast('Expiry extended', 'success');
+          openDetail(c.id);
+        } catch (e2) { App.toast((e2 && e2.detail) || 'Extend failed', 'error'); }
+      });
+    }
+
+    // Wire doc preview / type / delete.
+    detailBody.querySelectorAll('[data-doc-toggle]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const id = b.getAttribute('data-doc-toggle');
+        const mime = (b.getAttribute('data-mime') || '').toLowerCase();
+        const host = detailBody.querySelector('[data-doc-preview="' + id + '"]');
+        if (!host) return;
+        if (host.hidden) {
+          const url = '/api/admin/documents/' + id + '?_t=' + tok;
+          if (mime.startsWith('image/')) {
+            host.innerHTML = `<img src="${url}" alt="" class="doc-admin__img" />`;
+          } else if (mime === 'application/pdf') {
+            host.innerHTML = `<iframe class="doc-admin__pdf" src="${url}" title="Document preview"></iframe>`;
+          } else {
+            host.innerHTML = `<p class="text-muted">Preview not supported for <code>${App.escapeHtml(mime || 'unknown')}</code>. <a target="_blank" rel="noopener" href="${url}">Open in a new tab →</a></p>`;
+          }
+          host.hidden = false;
+          b.textContent = 'Hide';
+        } else {
+          host.hidden = true;
+          host.innerHTML = '';
+          b.textContent = 'Preview';
+        }
+      });
+    });
+    detailBody.querySelectorAll('[data-doc-type]').forEach((sel) => {
+      sel.addEventListener('change', async () => {
+        const id = sel.getAttribute('data-doc-type');
+        try {
+          await App.api('/admin/documents/' + id, { method: 'PATCH', body: { doc_type: sel.value } });
+          App.toast('Document type updated', 'success');
+        } catch (e) { App.toast((e && e.detail) || 'Update failed', 'error'); }
+      });
+    });
+    detailBody.querySelectorAll('[data-doc-del]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const id = b.getAttribute('data-doc-del');
+        if (!confirm('Delete this document permanently? The file will be removed from disk.')) return;
+        try {
+          await App.api('/admin/documents/' + id, { method: 'DELETE' });
+          App.toast('Document deleted', 'success');
+          openDetail(c.id);
+        } catch (e) { App.toast((e && e.detail) || 'Delete failed', 'error'); }
       });
     });
   }
@@ -723,20 +846,45 @@
           <header class="dash-card__head">
             <div>
               <h2 class="dash-card__title">Platform settings</h2>
-              <p class="dash-card__sub">Toggle the moderation policy and DNS automation. Changes take effect immediately for new claims.</p>
+              <p class="dash-card__sub">Two independent gates control the claim flow: <strong>approval</strong> (does an admin have to bless every claim?) and <strong>documents</strong> (do owners have to upload proof?). Changes take effect immediately for new claims.</p>
             </div>
           </header>
           <div style="padding:18px 24px 22px;">
             ${cfBanner}
+
             <form data-settings-form class="mt-3">
+
+              <h4 class="setting-group__title">Moderation</h4>
+              <label class="toggle-row">
+                <input type="checkbox" name="require_approval" ${s.require_approval ? 'checked' : ''} />
+                <span><strong>Require admin approval (recommended)</strong><span class="text-muted"> — every new claim lands as <code>pending</code> and stays private until you approve it. Cloudflare DNS is only published on approve.</span></span>
+              </label>
               <label class="toggle-row">
                 <input type="checkbox" name="require_documents" ${s.require_documents ? 'checked' : ''} />
-                <span><strong>Require admin approval (recommended)</strong><span class="text-muted"> — every claim lands as <code>pending</code> and stays private until you approve it. Document upload becomes available to the owner.</span></span>
+                <span><strong>Documents required at claim time</strong><span class="text-muted"> — when ON, the homepage claim wizard prompts the owner to upload at least one verification doc (EIIN certificate, board letter, NID, etc.) before submission. This is independent from approval — turn it OFF for instant onboarding without proof, or ON to collect docs even if approval is OFF.</span></span>
               </label>
               <label class="toggle-row">
                 <input type="checkbox" name="instant_claim" ${s.instant_claim ? 'checked' : ''} />
-                <span><strong>Show "Claim it now" CTA</strong><span class="text-muted"> — purely cosmetic copy on the homepage. Has no effect when admin approval is on.</span></span>
+                <span><strong>Show "Claim it now" CTA</strong><span class="text-muted"> — purely cosmetic copy on the homepage. Has no effect on the moderation flow.</span></span>
               </label>
+
+              <h4 class="setting-group__title mt-4">Domain term &amp; renewal</h4>
+              <div class="form-grid form-grid--2 mt-2">
+                <div class="field">
+                  <label class="label" for="set-term-days">Domain term (days)</label>
+                  <input id="set-term-days" name="domain_term_days" type="number" min="1" max="36500"
+                         value="${App.escapeHtml(String(s.domain_term_days || 365))}" />
+                  <p class="hint">Used to compute the expiry date when a claim is verified, and the new expiry on every renewal. 365 = 1 year.</p>
+                </div>
+                <div class="field">
+                  <label class="label" for="set-renew-price">Renewal price (BDT)</label>
+                  <input id="set-renew-price" name="domain_renewal_price_bdt" type="number" min="0" max="1000000"
+                         value="${App.escapeHtml(String(s.domain_renewal_price_bdt || 0))}" />
+                  <p class="hint">0 = renewals are free + auto-extend on owner click. Anything &gt; 0 routes the request through the new <a href="#" data-jump-pane="renewals">Renewals queue</a> (owner sees the configured payment methods).</p>
+                </div>
+              </div>
+
+              <h4 class="setting-group__title mt-4">Sign-up &amp; DNS</h4>
               <label class="toggle-row">
                 <input type="checkbox" name="cloudflare_auto_dns" ${s.cloudflare_auto_dns ? 'checked' : ''} />
                 <span><strong>Cloudflare auto-DNS</strong><span class="text-muted"> — automatically create / update the DNS record on Cloudflare when a claim is verified.</span></span>
@@ -745,6 +893,7 @@
                 <input type="checkbox" name="email_registration_enabled" ${s.email_registration_enabled ? 'checked' : ''} />
                 <span><strong>Allow manual email sign-up</strong><span class="text-muted"> — when ON, visitors can create an account with email + password from the homepage. Turn OFF to force everyone through Google / Facebook / GitHub OAuth (existing email accounts can still sign in).</span></span>
               </label>
+
               <div class="text-right mt-3"><button class="btn btn--primary" type="submit">Save settings</button></div>
             </form>
           </div>
@@ -753,10 +902,13 @@
         ev.preventDefault();
         const fd = new FormData(ev.currentTarget);
         const body = {
-          instant_claim:        fd.get('instant_claim') ? true : false,
+          require_approval:     fd.get('require_approval') ? true : false,
           require_documents:    fd.get('require_documents') ? true : false,
+          instant_claim:        fd.get('instant_claim') ? true : false,
           cloudflare_auto_dns:  fd.get('cloudflare_auto_dns') ? true : false,
           email_registration_enabled: fd.get('email_registration_enabled') ? true : false,
+          domain_term_days:     parseInt(fd.get('domain_term_days') || '365', 10),
+          domain_renewal_price_bdt: parseInt(fd.get('domain_renewal_price_bdt') || '0', 10),
         };
         try {
           await App.api('/admin/settings', { method: 'POST', body });
@@ -1245,4 +1397,162 @@
       }
     });
   }
+
+  /* ---------------------------------------------------------------- */
+  /*  v4.1 — Renewals pane                                              */
+  /* ---------------------------------------------------------------- */
+  let _renewalsFilter = { status: 'pending', q: '' };
+  function loadRenewals() {
+    const host = document.querySelector('[data-renewals-host]');
+    if (!host) return;
+    host.innerHTML = `
+      <div class="card dash-card">
+        <header class="dash-card__head">
+          <div>
+            <h2 class="dash-card__title">Domain renewals</h2>
+            <p class="dash-card__sub">Owners pay the configured renewal fee, then submit a request from their dashboard. Approve once you've confirmed the payment, and the expiry extends by the configured term.</p>
+          </div>
+          <button class="btn btn--ghost btn--sm" type="button" data-renewals-refresh>Refresh</button>
+        </header>
+        <form class="dash-card__filters" data-renewals-form>
+          <label class="dash-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Search by slug, name or owner email…" data-renewals-q autocomplete="off" />
+          </label>
+          <label class="dash-filter">
+            <select data-renewals-status>
+              <option value="pending"  ${_renewalsFilter.status === 'pending'  ? 'selected' : ''}>Pending only</option>
+              <option value="approved" ${_renewalsFilter.status === 'approved' ? 'selected' : ''}>Approved</option>
+              <option value="rejected" ${_renewalsFilter.status === 'rejected' ? 'selected' : ''}>Rejected</option>
+              <option value="any"      ${_renewalsFilter.status === 'any'      ? 'selected' : ''}>All</option>
+            </select>
+          </label>
+        </form>
+        <div data-renewals-body>
+          <div class="dash-empty"><div class="skeleton" style="height:80px;width:100%;"></div></div>
+        </div>
+      </div>`;
+
+    host.querySelector('[data-renewals-refresh]').addEventListener('click', loadRenewalsRows);
+    host.querySelector('[data-renewals-form]').addEventListener('submit', (e) => e.preventDefault());
+    const qEl = host.querySelector('[data-renewals-q]');
+    const sEl = host.querySelector('[data-renewals-status]');
+    const debounced = App.debounce(() => {
+      _renewalsFilter.q = (qEl.value || '').trim();
+      loadRenewalsRows();
+    }, 250);
+    qEl.addEventListener('input', debounced);
+    sEl.addEventListener('change', () => {
+      _renewalsFilter.status = sEl.value;
+      loadRenewalsRows();
+    });
+    loadRenewalsRows();
+  }
+
+  function loadRenewalsRows() {
+    const host = document.querySelector('[data-renewals-body]');
+    if (!host) return;
+    host.innerHTML = '<div class="dash-empty"><div class="skeleton" style="height:80px;width:100%;"></div></div>';
+    const params = { status: _renewalsFilter.status, q: _renewalsFilter.q, limit: 100 };
+    App.api('/admin/renewals' + App.qs(params)).then((r) => {
+      const items = r.items || [];
+      // Update sidebar pending-count badge.
+      const badge = document.querySelector('[data-renewals-pending]');
+      if (badge && _renewalsFilter.status === 'pending') {
+        badge.textContent = String(items.length);
+        badge.hidden = items.length === 0;
+      }
+      if (!items.length) {
+        host.innerHTML = `<div class="dash-empty"><p>No renewal requests${_renewalsFilter.status === 'pending' ? ' pending' : ''}.</p></div>`;
+        return;
+      }
+      host.innerHTML = `
+        <div class="dash-table-wrap">
+          <table class="dash-table">
+            <thead><tr>
+              <th>Domain</th><th>Owner</th><th>Price</th><th>Term</th>
+              <th>Status</th><th>Submitted</th><th class="text-right">Action</th>
+            </tr></thead>
+            <tbody>${items.map(renderRenewalRow).join('')}</tbody>
+          </table>
+        </div>`;
+      host.querySelectorAll('[data-renew-decide]').forEach((b) => {
+        b.addEventListener('click', () => decideRenewal(b));
+      });
+    }).catch((e) => {
+      host.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Load failed') + '</p>';
+    });
+  }
+  function renderRenewalRow(r) {
+    const inst = r.institution || {};
+    const ow = r.owner || {};
+    const statusBadge =
+      r.status === 'pending'  ? '<span class="badge badge--warning">Pending</span>' :
+      r.status === 'approved' ? '<span class="badge badge--verified">Approved</span>' :
+      r.status === 'rejected' ? '<span class="badge badge--danger">Rejected</span>' :
+                                '<span class="badge">' + App.escapeHtml(r.status) + '</span>';
+    const message = r.owner_message
+      ? '<div class="text-muted" style="font-size:.82rem;margin-top:4px;">"' + App.escapeHtml(r.owner_message) + '"</div>' : '';
+    return `
+      <tr data-renew-row="${r.id}">
+        <td>
+          <div class="dash-domain">
+            <span class="dash-domain__logo">${App.escapeHtml(App.initialsOf(inst.name_en || inst.slug || ''))}</span>
+            <div>
+              <div class="dash-domain__name">${App.escapeHtml(inst.subdomain || (inst.slug + '.' + inst.brand))}</div>
+              <div class="dash-domain__meta">${App.escapeHtml(inst.name_en || inst.slug || '')}</div>
+              ${message}
+            </div>
+          </div>
+        </td>
+        <td>${App.escapeHtml(ow.name || ow.email || '—')}</td>
+        <td>${r.price_bdt > 0 ? '৳ ' + r.price_bdt : '<span class="text-muted">Free</span>'}</td>
+        <td>${r.term_days} d</td>
+        <td>${statusBadge}</td>
+        <td>${App.escapeHtml(App.fmtDate(r.created_at))}</td>
+        <td class="text-right">
+          ${r.status === 'pending' ? `
+            <button class="btn btn--sm btn--primary" data-renew-decide="approve:${r.id}" type="button">Approve</button>
+            <button class="btn btn--sm btn--danger" data-renew-decide="reject:${r.id}" type="button">Reject</button>
+          ` : (r.new_expires_at ? '<span class="text-muted">→ ' + App.escapeHtml(App.fmtDate(r.new_expires_at)) + '</span>' : '—')}
+        </td>
+      </tr>`;
+  }
+  async function decideRenewal(btn) {
+    const [decision, idStr] = (btn.getAttribute('data-renew-decide') || '').split(':');
+    const id = parseInt(idStr, 10);
+    if (!decision || !id) return;
+    let note = '';
+    if (decision === 'reject') {
+      note = prompt('Reject this renewal — note for the owner (optional):', '') || '';
+      if (note === null) return;
+    } else {
+      if (!confirm('Approve this renewal? Expiry will extend immediately.')) return;
+    }
+    try {
+      await App.api('/admin/renewals/' + id + '/decide', { method: 'POST', body: { decision, note } });
+      App.toast('Renewal ' + (decision === 'approve' ? 'approved' : 'rejected'), 'success');
+      loadRenewalsRows();
+      loadOverview();
+    } catch (e) {
+      App.toast((e && e.detail) || 'Action failed', 'error');
+    }
+  }
+
+  // Refresh the sidebar pending badge on first load + every overview refresh.
+  function refreshRenewalsBadge() {
+    App.api('/admin/renewals?status=pending&limit=1').then((r) => {
+      const badge = document.querySelector('[data-renewals-pending]');
+      if (!badge) return;
+      const total = (r && r.total) || (r && r.items ? r.items.length : 0);
+      badge.textContent = String(total);
+      badge.hidden = total === 0;
+    }).catch(() => { /* badge stays hidden */ });
+  }
+  // Hook into the overview refresh — re-run after every loadOverview() call.
+  const _origLoadOverview = loadOverview;
+  loadOverview = function () {
+    _origLoadOverview();
+    refreshRenewalsBadge();
+  };
 })();

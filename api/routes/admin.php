@@ -120,10 +120,20 @@ function route_admin_decide(array $CONFIG, int $instId): void
         $dnsInfo = $cf;
         $cfRecordId = $cf['ok'] ? $cf['record_id'] : ($inst['cf_record_id'] ?? null);
         $dnsStatus = $cf['attempted'] ? ($cf['ok'] ? 'live' : 'error') : 'manual';
+        // v4.1 — start the expiry clock the moment the admin approves.
+        // If the institution already had an expires_at (e.g. it was
+        // verified previously and is being re-approved after suspension),
+        // keep the later of the two so we never accidentally truncate.
+        $termDays = max(1, settings_get_int($CONFIG, 'domain_term_days', 365));
+        $newExpires = date('Y-m-d H:i:s', strtotime($now) + $termDays * 86400);
+        if (!empty($inst['expires_at']) && strtotime($inst['expires_at']) > strtotime($newExpires)) {
+            $newExpires = $inst['expires_at'];
+        }
         $pdo->prepare(
             'UPDATE institutions SET status = ?, review_notes = ?, verified_at = ?,
-             cf_record_id = ?, dns_status = ?, dns_message = ? WHERE id = ?'
-        )->execute(['verified', $notes ?: null, $now, $cfRecordId, $dnsStatus, $cf['message'], $instId]);
+             expires_at = ?, cf_record_id = ?, dns_status = ?, dns_message = ? WHERE id = ?'
+        )->execute(['verified', $notes ?: null, $now, $newExpires,
+                    $cfRecordId, $dnsStatus, $cf['message'], $instId]);
     } elseif ($decision === 'reject') {
         // Best-effort DNS cleanup if a record was previously created.
         if (!empty($inst['cf_record_id'])) {
@@ -369,12 +379,21 @@ function route_admin_settings_get(array $CONFIG): void
     foreach (($CONFIG['brands'] ?? []) as $b) {
         $cfBrands[$b] = cf_enabled($CONFIG, $b);
     }
+    // v4.1 — `require_approval` is the new authoritative gate. Pre-v4.1
+    // installs only have `require_documents`; we mirror it onto the new
+    // toggle so the admin pane shows the correct state on first read.
+    $reqApproval = array_key_exists('require_approval', $s)
+        ? $s['require_approval'] === '1'
+        : ($s['require_documents'] === '1');
     send_json([
         'settings' => [
+            'require_approval'    => $reqApproval,
             'require_documents'   => $s['require_documents']   === '1',
             'instant_claim'       => $s['instant_claim']       === '1',
             'cloudflare_auto_dns' => $s['cloudflare_auto_dns'] === '1',
             'email_registration_enabled' => $s['email_registration_enabled'] === '1',
+            'domain_term_days'    => (int)($s['domain_term_days']    ?? 365),
+            'domain_renewal_price_bdt' => (int)($s['domain_renewal_price_bdt'] ?? 0),
         ],
         'cloudflare' => [
             'configured'        => array_filter($cfBrands) ? true : false,
@@ -388,13 +407,23 @@ function route_admin_settings_set(array $CONFIG): void
 {
     $admin = require_admin($CONFIG);
     $data = read_json_body();
-    $allowed = ['require_documents', 'instant_claim', 'cloudflare_auto_dns', 'email_registration_enabled'];
+    $boolKeys = ['require_approval', 'require_documents', 'instant_claim',
+                 'cloudflare_auto_dns', 'email_registration_enabled'];
+    $intKeys  = ['domain_term_days', 'domain_renewal_price_bdt'];
     $changed = [];
-    foreach ($allowed as $k) {
+    foreach ($boolKeys as $k) {
         if (!array_key_exists($k, $data)) continue;
         $v = $data[$k] ? '1' : '0';
         settings_set($CONFIG, $k, $v);
         $changed[$k] = $v === '1';
+    }
+    foreach ($intKeys as $k) {
+        if (!array_key_exists($k, $data)) continue;
+        $v = max(0, (int)$data[$k]);
+        // term must be at least 1 day to keep date math sane.
+        if ($k === 'domain_term_days') $v = max(1, $v);
+        settings_set($CONFIG, $k, (string)$v);
+        $changed[$k] = $v;
     }
     audit($CONFIG, (int)$admin['id'], null, 'admin.settings.update', json_encode($changed));
     route_admin_settings_get($CONFIG);
@@ -808,4 +837,224 @@ function route_admin_support_payments_delete(array $CONFIG, int $id): void
     $pdo->prepare('DELETE FROM support_payments WHERE id = ?')->execute([$id]);
     audit($CONFIG, (int)$admin['id'], null, 'admin.support_payment.delete', (string)$id);
     send_json(['ok' => true]);
+}
+
+
+
+/* =================================================================== */
+/*  v4.1 — admin claim-document maintenance                              */
+/*                                                                       */
+/*  We already serve every uploaded doc inline at GET /admin/documents/  */
+/*  {id} (route_admin_doc_download), which the new admin UI hosts in an  */
+/*  <img> / <iframe> for instant preview without forcing a download.     */
+/*  These two helpers round out the toolset:                             */
+/*                                                                       */
+/*    DELETE /admin/documents/{id}  — purge an obsolete doc + its file. */
+/*    PATCH  /admin/documents/{id}  — reclassify (change doc_type).     */
+/* =================================================================== */
+
+function route_admin_doc_delete(array $CONFIG, int $docId): void
+{
+    $admin = require_admin($CONFIG);
+    $pdo   = db($CONFIG);
+    $stmt  = $pdo->prepare('SELECT * FROM claim_documents WHERE id = ?');
+    $stmt->execute([$docId]);
+    $row = $stmt->fetch();
+    if (!$row) send_error('Not found', 404);
+    if (!empty($row['stored_path']) && is_file($row['stored_path'])) {
+        @unlink($row['stored_path']);
+    }
+    $pdo->prepare('DELETE FROM claim_documents WHERE id = ?')->execute([$docId]);
+    audit($CONFIG, (int)$admin['id'], (int)($row['institution_id'] ?? 0),
+        'admin.doc.delete', (string)($row['filename'] ?? ''));
+    send_json(['ok' => true]);
+}
+
+function route_admin_doc_patch(array $CONFIG, int $docId): void
+{
+    $admin = require_admin($CONFIG);
+    $data  = read_json_body();
+    $type  = (string)($data['doc_type'] ?? '');
+    if (!in_array($type, ALLOWED_DOC_TYPES, true)) {
+        send_error('Unknown doc_type', 400);
+    }
+    $pdo  = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT id, institution_id FROM claim_documents WHERE id = ?');
+    $stmt->execute([$docId]);
+    $row = $stmt->fetch();
+    if (!$row) send_error('Not found', 404);
+    $pdo->prepare('UPDATE claim_documents SET doc_type = ? WHERE id = ?')
+        ->execute([$type, $docId]);
+    audit($CONFIG, (int)$admin['id'], (int)$row['institution_id'],
+        'admin.doc.update', $type);
+    send_json(['ok' => true, 'doc_type' => $type]);
+}
+
+/* =================================================================== */
+/*  v4.1 — admin: extend a domain's expiry manually                      */
+/* =================================================================== */
+
+/**
+ * POST /api/admin/claims/{id}/extend
+ *
+ * Body: { days?: int, expires_at?: 'YYYY-MM-DD HH:MM:SS' }
+ *
+ * Either pumps `days` onto the current expiry (or now, whichever is
+ * later) or sets an absolute expiry timestamp. Useful for goodwill
+ * extensions, partner deals, or fixing a botched renewal without going
+ * through the renewals queue.
+ */
+function route_admin_claim_extend(array $CONFIG, int $instId): void
+{
+    $admin = require_admin($CONFIG);
+    $pdo   = db($CONFIG);
+    $stmt  = $pdo->prepare('SELECT * FROM institutions WHERE id = ?');
+    $stmt->execute([$instId]);
+    $inst = $stmt->fetch();
+    if (!$inst) send_error('Not found', 404);
+
+    $data = read_json_body();
+    $abs  = trim((string)($data['expires_at'] ?? ''));
+    $days = isset($data['days']) ? (int)$data['days'] : 0;
+    $newExpiresAt = null;
+
+    if ($abs !== '') {
+        $ts = strtotime($abs);
+        if ($ts === false) send_error('expires_at is not a valid timestamp', 400);
+        $newExpiresAt = date('Y-m-d H:i:s', $ts);
+    } elseif ($days > 0) {
+        $base = !empty($inst['expires_at']) && strtotime($inst['expires_at']) > time()
+            ? strtotime($inst['expires_at']) : time();
+        $newExpiresAt = date('Y-m-d H:i:s', $base + $days * 86400);
+    } else {
+        send_error('Provide either days (>0) or expires_at.', 400);
+    }
+
+    $pdo->prepare('UPDATE institutions SET expires_at = ? WHERE id = ?')
+        ->execute([$newExpiresAt, $instId]);
+    audit($CONFIG, (int)$admin['id'], $instId, 'admin.claim.extend',
+        json_encode(['from' => $inst['expires_at'] ?? null, 'to' => $newExpiresAt]));
+    $stmt->execute([$instId]);
+    send_json(['ok' => true, 'institution' => _claim_row($stmt->fetch())]);
+}
+
+/* =================================================================== */
+/*  v4.1 — admin: pending-renewal queue                                 */
+/* =================================================================== */
+
+/** GET /api/admin/renewals?status=pending|approved|rejected|any&q=… */
+function route_admin_renewals_list(array $CONFIG): void
+{
+    require_admin($CONFIG);
+    $status = trim((string)($_GET['status'] ?? 'pending'));
+    $q      = trim((string)($_GET['q'] ?? ''));
+    $limit  = max(1, min(200, (int)($_GET['limit'] ?? 100)));
+    $offset = max(0, (int)($_GET['offset'] ?? 0));
+
+    $where = [];
+    $bind  = [];
+    if ($status !== 'any') {
+        $where[] = 'r.status = ?';
+        $bind[]  = $status;
+    }
+    if ($q !== '') {
+        $where[] = '(i.slug LIKE ? OR i.name_en LIKE ? OR u.email LIKE ?)';
+        $like = '%' . $q . '%';
+        array_push($bind, $like, $like, $like);
+    }
+
+    $sql = "SELECT r.*,
+                   i.brand AS i_brand, i.slug AS i_slug, i.name_en AS i_name_en,
+                   u.email AS owner_email, u.name AS owner_name
+              FROM domain_renewals r
+         LEFT JOIN institutions i ON i.id = r.institution_id
+         LEFT JOIN users u        ON u.id = r.owner_user_id";
+    if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
+    $sql .= ' ORDER BY r.id DESC LIMIT ' . $limit . ' OFFSET ' . $offset;
+
+    $stmt = db($CONFIG)->prepare($sql);
+    $stmt->execute($bind);
+    $items = array_map(function ($r) {
+        $row = _renewal_row($r);
+        $row['institution'] = [
+            'brand'   => $r['i_brand'] ?? null,
+            'slug'    => $r['i_slug']  ?? null,
+            'name_en' => $r['i_name_en'] ?? null,
+            'subdomain' => ($r['i_slug'] ?? '') !== ''
+                ? ($r['i_slug'] . '.' . ($r['i_brand'] ?? '')) : null,
+        ];
+        $row['owner'] = [
+            'email' => $r['owner_email'] ?? null,
+            'name'  => $r['owner_name']  ?? null,
+        ];
+        return $row;
+    }, $stmt->fetchAll());
+
+    // Total (filtered).
+    $countSql = 'SELECT COUNT(*) c FROM domain_renewals r '
+              . 'LEFT JOIN institutions i ON i.id = r.institution_id '
+              . 'LEFT JOIN users u        ON u.id = r.owner_user_id';
+    if ($where) $countSql .= ' WHERE ' . implode(' AND ', $where);
+    $cs = db($CONFIG)->prepare($countSql);
+    $cs->execute($bind);
+    $total = (int)$cs->fetch()['c'];
+
+    send_json(['items' => $items, 'total' => $total]);
+}
+
+/** POST /api/admin/renewals/{id}/decide  body: { decision, note? } */
+function route_admin_renewal_decide(array $CONFIG, int $renewalId): void
+{
+    $admin = require_admin($CONFIG);
+    $data  = read_json_body();
+    $decision = (string)require_param($data, 'decision'); // approve | reject
+    if (!in_array($decision, ['approve', 'reject'], true)) {
+        send_error('decision must be approve or reject', 400);
+    }
+    $note = trim((string)($data['note'] ?? ''));
+    if (mb_strlen($note) > 1000) $note = mb_substr($note, 0, 1000);
+
+    $pdo  = db($CONFIG);
+    $stmt = $pdo->prepare('SELECT * FROM domain_renewals WHERE id = ?');
+    $stmt->execute([$renewalId]);
+    $r = $stmt->fetch();
+    if (!$r) send_error('Not found', 404);
+    if ($r['status'] !== 'pending') {
+        send_error('This renewal has already been decided.', 409);
+    }
+
+    $now = db_now($CONFIG);
+    if ($decision === 'approve') {
+        // Recompute the new expiry from the *current* institution row so
+        // we don't lose calendar time if the admin sat on the request for
+        // a while after the owner submitted it.
+        $instId = (int)$r['institution_id'];
+        $is = $pdo->prepare('SELECT expires_at FROM institutions WHERE id = ?');
+        $is->execute([$instId]);
+        $inst = $is->fetch();
+        $base = !empty($inst['expires_at']) && strtotime($inst['expires_at']) > time()
+            ? strtotime($inst['expires_at']) : time();
+        $termDays = max(1, (int)$r['term_days']);
+        $newExpires = date('Y-m-d H:i:s', $base + $termDays * 86400);
+
+        $pdo->prepare('UPDATE institutions SET expires_at = ? WHERE id = ?')
+            ->execute([$newExpires, $instId]);
+        $pdo->prepare(
+            "UPDATE domain_renewals SET status = 'approved', note = ?,
+             new_expires_at = ?, decided_by_user_id = ?, decided_at = ?
+             WHERE id = ?"
+        )->execute([$note !== '' ? $note : null, $newExpires, (int)$admin['id'], $now, $renewalId]);
+        audit($CONFIG, (int)$admin['id'], $instId, 'admin.renewal.approve',
+            json_encode(['renewal_id' => $renewalId, 'new_expires_at' => $newExpires]));
+    } else {
+        $pdo->prepare(
+            "UPDATE domain_renewals SET status = 'rejected', note = ?,
+             decided_by_user_id = ?, decided_at = ? WHERE id = ?"
+        )->execute([$note !== '' ? $note : null, (int)$admin['id'], $now, $renewalId]);
+        audit($CONFIG, (int)$admin['id'], (int)$r['institution_id'],
+            'admin.renewal.reject', json_encode(['renewal_id' => $renewalId, 'note' => $note]));
+    }
+
+    $stmt->execute([$renewalId]);
+    send_json(['ok' => true, 'renewal' => _renewal_row($stmt->fetch())]);
 }

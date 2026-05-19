@@ -110,6 +110,10 @@ function db_init_schema(array $CONFIG): void
             dns_message $text NULL,
             created_at $now,
             verified_at $dt,
+            -- v4.1 — when the domain term ends. Set to verified_at + N days
+            -- (default 365) on every approve/instant-claim. NULL until
+            -- the domain is verified for the first time. Renewal extends it.
+            expires_at $dt,
             UNIQUE (brand, slug)
         )$charset",
         "CREATE TABLE IF NOT EXISTS reserved_slugs (
@@ -186,19 +190,28 @@ function db_init_schema(array $CONFIG): void
             created_at $now,
             updated_at $now
         )$charset",
-        // v3.2 — admin-managed "Support the developer" payment methods.
-        // Surface on /dashboard.php → Support Developer pane.
-        "CREATE TABLE IF NOT EXISTS support_payments (
+        // v4.1 — domain renewal history. One row per renewal request from
+        // the owner. When the domain term price is 0 (free), the request
+        // is created with status='approved' immediately and the parent
+        // institution's expires_at is bumped right away. When the admin
+        // has set a non-zero price, the row lands as 'pending' and the
+        // owner is shown the configured payment methods; an admin marks
+        // it 'approved' (or 'rejected') from the renewals pane, which
+        // bumps expires_at on approve.
+        "CREATE TABLE IF NOT EXISTS domain_renewals (
             id $pk,
-            method VARCHAR(40)  NOT NULL,
-            label  VARCHAR(120) NOT NULL,
-            number VARCHAR(120) NULL,
-            note   $text NULL,
-            qr_url VARCHAR(512) NULL,
-            sort_order INTEGER  NOT NULL DEFAULT 0,
-            visible $bool,
-            created_at $now,
-            updated_at $now
+            institution_id INTEGER NOT NULL,
+            owner_user_id INTEGER NULL,
+            term_days INTEGER NOT NULL DEFAULT 365,
+            price_bdt INTEGER NOT NULL DEFAULT 0,
+            status VARCHAR(16) NOT NULL DEFAULT 'pending',
+            note $text NULL,
+            owner_message $text NULL,
+            previous_expires_at $dt,
+            new_expires_at $dt,
+            decided_by_user_id INTEGER NULL,
+            decided_at $dt,
+            created_at $now
         )$charset",
     ];
     foreach ($stmts as $sql) {
@@ -221,6 +234,8 @@ function db_init_schema(array $CONFIG): void
         "CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_dns_records_inst ON dns_records(institution_id)",
         "CREATE INDEX IF NOT EXISTS idx_support_pay_visible ON support_payments(visible, sort_order)",
+        "CREATE INDEX IF NOT EXISTS idx_renewals_inst ON domain_renewals(institution_id)",
+        "CREATE INDEX IF NOT EXISTS idx_renewals_status ON domain_renewals(status, created_at)",
     ];
     foreach ($idx as $sql) {
         try { $pdo->exec($sql); } catch (PDOException $e) { /* mysql older versions */ }
@@ -250,6 +265,19 @@ function db_init_schema(array $CONFIG): void
         if (!in_array($col, $userCols, true)) {
             try { $pdo->exec($sql); } catch (PDOException $e) { /* tolerate */ }
         }
+    }
+
+    // v4.1 — institutions.expires_at (when the domain term lapses).
+    // Existing pre-v4.1 installs will not have this column yet; add it
+    // idempotently. We *don't* backfill — admins can run a one-off
+    // "extend all verified" from the renewals pane if they want every
+    // legacy domain to have a real expiry date. By default they read
+    // `null` => "no expiry on file" which the dashboard renders as
+    // "Free · no expiry".
+    $instCols = db_columns($pdo, 'institutions', $mysql);
+    if (!in_array('expires_at', $instCols, true)) {
+        try { $pdo->exec("ALTER TABLE institutions ADD COLUMN expires_at $dt"); }
+        catch (PDOException $e) { /* tolerate */ }
     }
 
     // v2.3.1 — relax users.phone NOT NULL constraint on legacy v1 DBs.
@@ -506,16 +534,26 @@ function db_seed_support_payments_if_empty(array $CONFIG): void
 function settings_defaults(): array
 {
     return [
-        // v3.2 — admin moderation is now ON by default. Every fresh claim
-        // lands as `pending` and waits for an admin decision (approve,
-        // needs_info, reject, suspend) before DNS is published. Admins can
-        // still flip this OFF to re-enable the v3.0 instant-claim flow if
-        // they prefer self-service onboarding.
+        // v4.1 — *Domain approval required.* When ON (default), every new
+        // claim lands as `pending` and stays private until an admin
+        // approves it. When OFF, claims auto-verify and Cloudflare DNS is
+        // published immediately (the v3.0 instant-claim flow). This is
+        // SEPARATE from `require_documents` — admins can require approval
+        // without requiring documents (light-touch moderation), or require
+        // documents without requiring approval (collect proof but don't
+        // gate the launch).
+        'require_approval'     => '1',
+        // v4.1 — *Documents required.* When ON, the claim wizard prompts
+        // the owner to upload at least one verification document (EIIN
+        // certificate, board letter, NID, etc.) before the claim is
+        // submitted. The dashboard "Documents" tab is always available to
+        // verified owners, but this toggle controls whether the homepage
+        // claim flow blocks submission on missing documents.
         'require_documents'    => '1',
-        // Mirrors the above: when require_documents is ON, the homepage /
+        // Mirrors the above: when require_approval is ON, the homepage /
         // claim flow no longer pretends the subdomain is "instant". Admins
         // can flip this on independently if they want to advertise instant
-        // claims even with documents required.
+        // claims even with admin moderation enabled.
         'instant_claim'        => '0',
         // Auto-create a Cloudflare DNS record on every claim that's verified
         // (by admin approval, or by instant-claim if it's re-enabled). Falls
@@ -526,6 +564,14 @@ function settings_defaults(): array
         // endpoint returns 403, so visitors can only sign in (or sign up via
         // the configured OAuth providers). Default ON.
         'email_registration_enabled' => '1',
+        // v4.1 — domain term length, in days. Used to compute expires_at
+        // on every approve / instant-claim verify, and to extend on
+        // renewal. 365 by default.
+        'domain_term_days'     => '365',
+        // v4.1 — domain renewal price in BDT (whole taka). 0 means free
+        // renewals (auto-extend on owner click). Anything > 0 routes the
+        // request through the admin's pending-renewals queue.
+        'domain_renewal_price_bdt' => '0',
     ];
 }
 
@@ -548,6 +594,14 @@ function settings_get_bool(array $CONFIG, string $key, bool $default = false): b
     if (!array_key_exists($key, $all)) return $default;
     $v = strtolower(trim((string)$all[$key]));
     return in_array($v, ['1', 'true', 'yes', 'on'], true);
+}
+
+/** v4.1 — read an integer setting (term days, renewal price, …). */
+function settings_get_int(array $CONFIG, string $key, int $default = 0): int
+{
+    $all = settings_get_all($CONFIG);
+    if (!array_key_exists($key, $all) || $all[$key] === null || $all[$key] === '') return $default;
+    return (int)$all[$key];
 }
 
 function settings_set(array $CONFIG, string $key, string $value): void

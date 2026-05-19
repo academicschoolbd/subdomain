@@ -1,6 +1,8 @@
 /* ===========================================================================
-   institution.bd / smartschool.bd  — v4.0 frontend
+   institution.bd / smartschool.bd  — v4.1 frontend
    Flat, modern, fully mobile-responsive — Raleway type, light + dark themes.
+   v4.1 adds modern Stay-Connected glass band + dark-mode button fixes +
+   admin doc-preview panel + renewal flow polish.
    =========================================================================== */
 html { scroll-behavior: smooth; scroll-padding-top: 80px; }
 
@@ -2724,3 +2726,418 @@ img, video, iframe, embed, object {
   -webkit-overflow-scrolling: touch;
 }
 
+
+
+
+
+/* ===========================================================================
+   v4.1 — Modern Stay-Connected band
+   ===========================================================================
+   Replaces the v3.x .dash-banner with a fresh, glassy card that uses a
+   layered mesh-gradient background (three blurred radial blobs), a frosted
+   foreground panel, and a softer typography lockup. Same DOM hooks
+   (data-banner, data-banner-title, data-banner-sub, data-banner-{community,
+   like,creator,creator-text}) so the banner-render code in dashboard.js
+   keeps working unchanged. =================================================== */
+
+.connect-band {
+  position: relative;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  isolation: isolate;
+  margin-bottom: 0;
+  box-shadow:
+    0 1px 0 rgba(15, 23, 42, .04),
+    0 12px 36px -16px rgba(15, 23, 42, .25);
+}
+
+/* Layered radial-gradient mesh — three off-screen "blobs" tinted with
+   the brand palette, scaled and blurred so the edges bleed into a soft
+   pastel wash. The whole stack sits behind the frosted panel below. */
+.connect-band__bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(15, 118, 110, .14), transparent 55%),
+    radial-gradient(120% 120% at 0% 100%, rgba(37, 99, 235, .12),  transparent 60%),
+    linear-gradient(135deg, #f0fdfa 0%, #eff6ff 50%, #fff7ed 100%);
+  z-index: 0;
+}
+.connect-band__bg::after {
+  content: '';
+  position: absolute; inset: -2px;
+  background-image:
+    linear-gradient(rgba(15, 23, 42, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, .035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+          mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  pointer-events: none;
+}
+.connect-band__blob {
+  position: absolute;
+  width: 280px; height: 280px;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: .55;
+  pointer-events: none;
+}
+.connect-band__blob--a { top: -90px; left: -60px;  background: radial-gradient(circle, #14b8a6, transparent 70%); }
+.connect-band__blob--b { top: -40px; right: -80px; background: radial-gradient(circle, #6366f1, transparent 70%); opacity: .42; }
+.connect-band__blob--c { bottom: -120px; left: 40%; background: radial-gradient(circle, #f97316, transparent 70%); opacity: .35; }
+
+/* Frosted foreground panel — glass on top of the mesh. */
+.connect-band__inner {
+  position: relative;
+  z-index: 1;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 22px;
+  padding: 22px 24px;
+  background: rgba(255, 255, 255, .55);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+          backdrop-filter: blur(14px) saturate(160%);
+  border-radius: var(--r-xl);
+  border: 1px solid rgba(255, 255, 255, .55);
+}
+.connect-band__lead { flex: 1 1 280px; min-width: 0; }
+.connect-band__pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: var(--r-full);
+  background: rgba(15, 118, 110, .1); color: var(--c-primary-700);
+  font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.connect-band__title {
+  margin: 0 0 4px;
+  font-size: clamp(1.1rem, 2.2vw, 1.32rem);
+  letter-spacing: -.01em;
+  color: var(--c-heading);
+}
+.connect-band__sub {
+  margin: 0;
+  color: #475569;
+  font-size: .95rem;
+  max-width: 52ch;
+}
+.connect-band__cta {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  flex-shrink: 0;
+}
+.connect-band__btn {
+  font-size: .88rem; padding: 9px 16px;
+}
+.connect-band__btn:hover { transform: translateY(-1px); }
+.connect-band__btn--like {
+  background: rgba(255, 255, 255, .9);
+  border: 1px solid var(--c-border);
+}
+/* Phones — let the buttons stack flush, drop the eyebrow pill spacing. */
+@media (max-width: 760px) {
+  .connect-band__inner { padding: 20px 18px; gap: 16px; flex-direction: column; align-items: stretch; }
+  .connect-band__lead { width: 100%; }
+  .connect-band__cta { width: 100%; }
+  .connect-band__cta .btn { flex: 1 1 calc(50% - 5px); justify-content: center; }
+  .connect-band__cta .btn--gradient { flex: 1 1 100%; }
+  .connect-band__title { font-size: 1.1rem; }
+  .connect-band__sub { font-size: .9rem; }
+  .connect-band__blob { width: 220px; height: 220px; filter: blur(48px); }
+}
+@media (max-width: 380px) {
+  .connect-band__cta .btn { flex: 1 1 100%; }
+}
+
+/* Dark-mode pass — mesh stays visible but pulled toward the dark palette. */
+html[data-theme="dark"] .connect-band__bg {
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(20, 184, 166, .22), transparent 55%),
+    radial-gradient(120% 120% at 0% 100%, rgba(96, 165, 250, .18),  transparent 60%),
+    linear-gradient(135deg, #0b1220 0%, #0f172a 50%, #111827 100%);
+}
+html[data-theme="dark"] .connect-band__bg::after {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .04) 1px, transparent 1px);
+}
+html[data-theme="dark"] .connect-band__inner {
+  background: rgba(15, 23, 42, .55);
+  border-color: rgba(255, 255, 255, .08);
+}
+html[data-theme="dark"] .connect-band__title { color: var(--c-heading); }
+html[data-theme="dark"] .connect-band__sub   { color: #94a3b8; }
+html[data-theme="dark"] .connect-band__pill {
+  background: rgba(20, 184, 166, .18);
+  color: #5eead4;
+}
+html[data-theme="dark"] .connect-band__btn--like {
+  background: rgba(255, 255, 255, .06);
+  border-color: var(--c-border-strong);
+  color: var(--c-text);
+}
+
+/* Honour reduced-motion (no .connect-band__btn lift on tap). */
+@media (prefers-reduced-motion: reduce) {
+  .connect-band__btn:hover { transform: none; }
+}
+
+
+/* ===========================================================================
+   v4.1 — Dark-mode button colour fixes
+   ===========================================================================
+   Pre-v4.1 the default `.btn` had `background: #fff; color: var(--c-heading);`
+   which in dark mode resolves to `near-white text on near-white background`,
+   so the label was effectively invisible. The same problem existed on
+   `.cta-band .btn`, `.btn--white`, the `.wa-band .btn--white`, the auth
+   modal's neutral .btn, and the connect-band Like button. Fix each
+   variant explicitly so they read clearly against the dark surface
+   palette without affecting the light theme. =============================== */
+
+html[data-theme="dark"] .btn {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border-color: var(--c-border-strong);
+}
+html[data-theme="dark"] .btn:hover {
+  background: var(--c-surface);
+  color: var(--c-heading);
+  box-shadow: var(--shadow-md);
+}
+/* Outline variant should stay outline-only (transparent bg). */
+html[data-theme="dark"] .btn--outline {
+  background: transparent;
+  color: var(--c-text);
+  border-color: var(--c-border-strong);
+}
+html[data-theme="dark"] .btn--outline:hover {
+  background: rgba(255, 255, 255, .04);
+  color: var(--c-heading);
+}
+/* Ghost stays transparent — already dark-mode-friendly. */
+html[data-theme="dark"] .btn--ghost {
+  background: transparent;
+  color: var(--c-text);
+  border-color: transparent;
+}
+html[data-theme="dark"] .btn--ghost:hover {
+  background: rgba(255, 255, 255, .06);
+  color: var(--c-heading);
+}
+/* Primary keeps its branded fill — already readable. */
+html[data-theme="dark"] .btn--primary {
+  background: var(--c-primary);
+  color: #0b1220;
+  border-color: transparent;
+}
+html[data-theme="dark"] .btn--primary:hover {
+  background: var(--c-primary-700);
+  color: #fff;
+}
+/* Danger / success stay solid; dark-mode keeps the contrast. */
+html[data-theme="dark"] .btn--danger,
+html[data-theme="dark"] .btn--success {
+  color: #0b1220;
+  border-color: transparent;
+}
+html[data-theme="dark"] .btn--danger-text {
+  color: #fca5a5;
+}
+html[data-theme="dark"] .btn--danger-text:hover {
+  background: rgba(248, 113, 113, .12);
+  color: #fecaca;
+}
+/* Dark inverse button (used on light banners) — flip palette in dark mode. */
+html[data-theme="dark"] .btn--dark {
+  background: #f8fafc;
+  color: #0b1220;
+}
+html[data-theme="dark"] .btn--dark:hover {
+  background: #e2e8f0;
+  color: #0b1220;
+}
+/* WhatsApp keeps its brand colour but dark-mode bumps the hover shadow. */
+html[data-theme="dark"] .btn--whatsapp { color: #0b1220; }
+html[data-theme="dark"] .btn--whatsapp:hover { color: #0b1220; filter: brightness(1.08); }
+/* "white" CTA on coloured bands (cta-band, wa-band) — keep it light + readable. */
+html[data-theme="dark"] .wa-band .btn--white,
+html[data-theme="dark"] .cta-band .btn,
+html[data-theme="dark"] .cta-band .btn--primary {
+  background: #f8fafc;
+  color: var(--c-primary-700);
+  border-color: transparent;
+}
+html[data-theme="dark"] .wa-band .btn--white:hover,
+html[data-theme="dark"] .cta-band .btn:hover,
+html[data-theme="dark"] .cta-band .btn--primary:hover {
+  background: #e2e8f0;
+  color: var(--c-primary-700);
+}
+/* Modal close × button used pure black before — dark mode now reads. */
+html[data-theme="dark"] .modal__close { color: var(--c-muted); }
+html[data-theme="dark"] .modal__close:hover { color: var(--c-text); }
+/* Quick-action tile in admin — already uses surface tokens, but flip the
+   ico backplate in dark mode so it pops the same way. */
+html[data-theme="dark"] .quick-action__ico {
+  background: rgba(20, 184, 166, .18);
+  color: #5eead4;
+}
+
+
+/* ===========================================================================
+   v4.1 — Settings pane group headings
+   =========================================================================== */
+
+.setting-group__title {
+  margin: 0 0 8px;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+
+/* ===========================================================================
+   v4.1 — Admin claim-detail document preview
+   =========================================================================== */
+
+.docs-admin {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 6px;
+}
+.doc-admin {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.doc-admin:hover { border-color: var(--c-primary-100); box-shadow: var(--shadow-xs); }
+.doc-admin__head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.doc-admin__type {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: .82rem;
+  font-family: inherit;
+  color: var(--c-text);
+}
+.doc-admin__name {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: .85rem;
+  word-break: break-word;
+}
+.doc-admin__actions {
+  display: inline-flex; gap: 6px; flex-wrap: wrap;
+}
+.doc-admin__preview {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-border);
+  text-align: center;
+}
+.doc-admin__img {
+  max-width: 100%;
+  max-height: 480px;
+  margin: 0 auto;
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm);
+}
+.doc-admin__pdf {
+  width: 100%;
+  height: 540px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-bg);
+}
+@media (max-width: 599px) {
+  .doc-admin__pdf { height: 400px; }
+}
+html[data-theme="dark"] .doc-admin {
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+html[data-theme="dark"] .doc-admin__type {
+  background: var(--c-surface);
+  border-color: var(--c-border-strong);
+}
+
+
+/* ===========================================================================
+   v4.1 — Renewal modal "summary card" + admin renewal queue rows
+   =========================================================================== */
+
+.renew-card {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+}
+.renew-card__row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 6px 0;
+  font-size: .92rem;
+  border-bottom: 1px dashed var(--c-border);
+}
+.renew-card__row:last-child { border-bottom: none; }
+.renew-card__row > span:first-child { color: var(--c-muted); }
+.renew-pay-grid { margin-top: 12px; }
+html[data-theme="dark"] .renew-card { background: var(--c-surface); border-color: var(--c-border-strong); }
+
+
+/* ===========================================================================
+   v4.1 — Dashboard "smoothness" polish
+   ===========================================================================
+   Subtle improvements that add up: row hover lift, smoother tab/active
+   transitions, table-row stagger on first paint, sticky main-pane head.
+   =========================================================================== */
+
+.dash-table tbody tr {
+  transition: background .12s ease, box-shadow .12s ease;
+}
+@media (min-width: 700px) {
+  .dash-table tbody tr:hover {
+    background: rgba(15, 118, 110, .03);
+  }
+  html[data-theme="dark"] .dash-table tbody tr:hover {
+    background: rgba(20, 184, 166, .06);
+  }
+}
+
+/* Quick-tile "press" feedback. */
+.quick-tile:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
+
+/* When a domain is expired, the row gets a left rail accent so the eye
+   catches it instantly in a long table. */
+.dash-table .badge--danger ~ * { /* no-op selector reservation */ }
+
+/* Sticky pane heading on tall lists (settings, renewals, queue). */
+@media (min-width: 900px) {
+  .dash-card__head {
+    position: sticky;
+    top: 70px;
+    z-index: 2;
+    background: var(--c-surface);
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
+  }
+  html[data-theme="dark"] .dash-card__head {
+    background: rgba(15, 23, 42, .9);
+  }
+}
+
+/* Tighten the row-actions strip so Open / Renew / Manage line up neatly. */
+.dash-row-actions { gap: 6px; }
+@media (max-width: 700px) {
+  .dash-row-actions { gap: 4px; }
+  .dash-row-actions .btn { padding: 6px 10px; font-size: .8rem; }
+}
+
+/* When a domain's expiry pill takes up more horizontal room than the
+   simple "Free · no expiry" string, allow it to wrap rather than shove
+   the action column off screen on phones. */
+.dash-table td:nth-child(4) {
+  white-space: normal;
+  word-break: break-word;
+}

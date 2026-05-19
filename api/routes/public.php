@@ -93,9 +93,15 @@ function route_public_settings(array $CONFIG): void
             'community_subtitle' => (string)($wa['community_subtitle'] ?? ''),
         ],
         'platform' => [
+            // v4.1 — split moderation toggles + renewal pricing.
+            'require_approval'    => array_key_exists('require_approval', $platform)
+                ? $platform['require_approval'] === '1'
+                : ($platform['require_documents'] === '1'),
             'require_documents'   => $platform['require_documents']   === '1',
             'instant_claim'       => $platform['instant_claim']       === '1',
             'cloudflare_auto_dns' => $platform['cloudflare_auto_dns'] === '1',
+            'domain_term_days'    => (int)($platform['domain_term_days'] ?? 365),
+            'domain_renewal_price_bdt' => (int)($platform['domain_renewal_price_bdt'] ?? 0),
         ],
         'cloudflare' => [
             'configured'      => array_filter($cfBrands) ? true : false,

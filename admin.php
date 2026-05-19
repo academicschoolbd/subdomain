@@ -129,6 +129,13 @@
             </span>
             <span>Support payments</span>
           </button>
+          <button class="dash-nav__item" data-pane-btn="renewals" type="button">
+            <span class="dash-nav__ico" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>
+            </span>
+            <span>Renewals</span>
+            <span class="dash-nav__count" data-renewals-pending hidden>0</span>
+          </button>
         </nav>
 
         <footer class="dash-sidebar__foot">
@@ -401,6 +408,11 @@
         <!-- =================== PAYMENTS PANE =================== -->
         <section class="dash-pane" data-pane="payments" hidden>
           <div data-payments-admin-host></div>
+        </section>
+
+        <!-- =================== RENEWALS PANE (v4.1) =================== -->
+        <section class="dash-pane" data-pane="renewals" hidden>
+          <div data-renewals-host></div>
         </section>
 
       </main>
