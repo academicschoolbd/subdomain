@@ -1,0 +1,19 @@
+# Local test artifacts — never commit these.
+api/config.php
+api/data/*.db
+api/data/*.db-journal
+api/data/*.db-wal
+api/data/*.db-shm
+uploads/docs/
+uploads/images/
+
+# Editor / OS noise.
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Build artifacts (none today, kept for forward-compat).
+node_modules/
+dist/
