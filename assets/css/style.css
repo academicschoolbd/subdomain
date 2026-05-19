@@ -1017,12 +1017,6 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ===== Prevent Horizontal Overflow ===== */
 @media (max-width: 575.98px) {
-  body {
-    overflow-x: hidden;
-  }
-  .container, .container-fluid {
-    overflow-x: hidden;
-  }
   .dash-layout {
     max-width: 100vw;
     overflow-x: hidden;

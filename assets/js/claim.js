@@ -244,12 +244,22 @@
     // Reset state
     const checkbox = modal.querySelector('[data-ensurity-check]');
     const confirmBtn = modal.querySelector('[data-ensurity-confirm]');
-    checkbox.checked = false;
-    confirmBtn.disabled = true;
 
-    // Remove previous confirm listener and attach a fresh one
+    // Clone both checkbox and confirm button to remove stale listeners
+    const newCheckbox = checkbox.cloneNode(true);
+    checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+    newCheckbox.checked = false;
+
     const newConfirmBtn = confirmBtn.cloneNode(true);
     confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.disabled = true;
+
+    // Wire checkbox to enable/disable confirm button
+    newCheckbox.addEventListener('change', () => {
+      newConfirmBtn.disabled = !newCheckbox.checked;
+    });
+
+    // Wire confirm button click
     newConfirmBtn.addEventListener('click', () => {
       const bsModal = bootstrap.Modal.getInstance(modal);
       if (bsModal) bsModal.hide();
@@ -262,11 +272,6 @@
         prefillDetailsForm(user);
         showPrivacyDialog();
       }
-    });
-
-    // Re-wire checkbox to the new button
-    checkbox.addEventListener('change', () => {
-      newConfirmBtn.disabled = !checkbox.checked;
     });
 
     // Show the modal

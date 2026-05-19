@@ -269,8 +269,8 @@
     if (!host) return;
     try {
       let r;
-      try { r = await App.api('/institutions?limit=6&sort=recent'); }
-      catch { r = await App.api('/directory?limit=6&sort=recent'); }
+      try { r = await App.api('/institutions?status=any&limit=6'); }
+      catch { r = await App.api('/directory?status=any&limit=6'); }
       const items = r.items || [];
       if (!items.length) {
         host.innerHTML = '<div class="col-12"><p class="text-muted text-center">No registered domains yet — be the first to claim!</p></div>';
