@@ -485,7 +485,7 @@ function route_tenant_dns_list(array $CONFIG, int $instId): void
     $u = require_user($CONFIG);
     $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
     if ($inst['status'] !== 'verified') {
-        send_error('DNS records are only available after the subdomain is verified.', 409);
+        send_error('DNS records become available after this subdomain is approved by an admin.', 409);
     }
     $stmt = db($CONFIG)->prepare(
         'SELECT * FROM dns_records WHERE institution_id = ? ORDER BY id ASC'
@@ -505,7 +505,7 @@ function route_tenant_dns_create(array $CONFIG, int $instId): void
     $u = require_user($CONFIG);
     $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
     if ($inst['status'] !== 'verified') {
-        send_error('Subdomain must be verified before adding DNS records.', 409);
+        send_error('Subdomain must be approved before adding DNS records. Pending claims cannot publish DNS.', 409);
     }
     $data = read_json_body();
     [$errors, $clean] = _dns_validate($data);
@@ -545,7 +545,7 @@ function route_tenant_dns_update(array $CONFIG, int $instId, int $recId): void
     $u = require_user($CONFIG);
     $inst = _ensure_owner($CONFIG, $instId, (int)$u['id'], $u['is_admin']);
     if ($inst['status'] !== 'verified') {
-        send_error('Subdomain must be verified.', 409);
+        send_error('Subdomain must be approved before editing DNS records.', 409);
     }
     $pdo = db($CONFIG);
     $stmt = $pdo->prepare('SELECT * FROM dns_records WHERE id = ? AND institution_id = ?');

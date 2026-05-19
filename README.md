@@ -1,32 +1,38 @@
-# Free Subdomain Platform — institution.bd & smartschool.bd  (v3.3)
+# Free Subdomain Platform — institution.bd & smartschool.bd  (v4.0)
 
 A free verified-subdomain platform for every Bangladeshi school, college,
 university, madrasa, polytechnic, training institute and NGO.
 
-> **v3.3 — what's new**
-> - **Mobile nav no longer locks up after sign-in.** The header CTA row
->   used to overflow once `[avatar | name | sign-out | dark-mode | menu]`
->   all crowded in, leaving the hamburger un-tappable on phones. The row
->   now has a stable visual order, the user-name link collapses below
->   900 px, and every control has a fixed-width hit target so the
->   hamburger and dark-mode toggle never overlap each other.
-> - **GitHub icon visible in dark mode.** The OAuth provider button used
->   to render an invisible black-on-near-black octocat in dark mode; now
->   filter-inverted so it reads cleanly against either theme.
-> - **Admin can disable manual email registration.** New
->   `email_registration_enabled` toggle in Admin → Platform settings.
->   Turning it OFF hides the homepage "Create account" tab + every
->   `data-mode="signup"` CTA, and `/api/auth/register` returns `403`.
->   Existing accounts can still sign in, OAuth still works.
-> - **Cloudflare token test now accepts scoped tokens.** The validator
->   used to call only `/user/tokens/verify`, which silently 401s on any
->   token that doesn't include the `User → User Details: Read`
->   permission — even when the token works perfectly for DNS. The new
->   validator falls through `verify → /zones list → GET /zones/{id}`
->   (the exact call the Cloudflare docs show), so a minimally-scoped
->   `Zone → DNS → Edit` token now reports as valid.
-> - **Polished mobile header.** Tighter spacing, no horizontal scroll,
->   no overlapping icons after login.
+> **v4.0 — what's new**
+> - **Mobile-first home page (no more pinch-to-zoom).** Reworked every
+>   breakpoint on the public site so the hero, search box, live-stats
+>   tiles, brand cards, features, FAQ, footer and final CTA all fit
+>   inside a 320 px viewport without horizontal scroll. Long FQDNs and
+>   subdomain `<code>` blocks now wrap at any character; the hero
+>   headline auto-clamps to fit even on the narrowest phones.
+> - **Auto Cloudflare DNS sync — only on approved domains.** Owner DNS
+>   record create / edit / delete already pushes to Cloudflare via the
+>   stored API token. v4 hardens the gate: the API rejects DNS reads /
+>   writes on every non-verified status (`pending`, `needs_info`,
+>   `rejected`, `seeded`, `suspended`) with a friendlier message
+>   ("approved by an admin"), and the dashboard Manage modal hides the
+>   whole DNS tab until approval. Pending claims simply cannot publish
+>   DNS — local or upstream.
+> - **Owner DNS panel no longer shows "Retry DNS".** Retrying a stuck
+>   Cloudflare push is an operator concern; the button stayed on the
+>   admin console only. The owner card is now just a status pill plus
+>   "Open `<subdomain>` →".
+> - **Dashboard, admin, claim, directory, institution, auth pages** all
+>   re-audited for narrow-screen behaviour: tab strips scroll instead of
+>   wrapping, banner CTAs go full-width, tables stay inside their
+>   wrappers, and any flex row that previously overflowed (`.flex-between`)
+>   now wraps with a hard `min-width:0`.
+>
+> **v3.3 — what shipped before**
+> - Mobile nav fix after sign-in (predictable order, fixed-width hit
+>   targets), GitHub-icon visible in dark mode, admin toggle to disable
+>   manual email registration, scoped Cloudflare token validator,
+>   harder secret masking.
 
 > **v3.2 highlights**
 > - **Owner-managed DNS records.** Every verified tenant gets a real DNS
@@ -219,7 +225,7 @@ and seeds the reserved-slug list + 12 demo institutions.
 
 ---
 
-## Production launch checklist (v3.3 final)
+## Production launch checklist (v4.0 final)
 
 Before flipping the public DNS, walk through this list once.
 

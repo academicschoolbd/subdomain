@@ -367,7 +367,6 @@
         ${visibleMsg ? `<p class="text-danger" style="margin:.4em 0;font-size:.88rem;">${App.escapeHtml(visibleMsg)}</p>` : ''}
         <div class="dns-panel__actions">
           <a class="btn btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(fqdn)}">Open ${App.escapeHtml(fqdn)} →</a>
-          <button class="btn btn--sm" data-dns-retry="${c.id}" type="button">Retry DNS</button>
         </div>
       </section>`;
   }
@@ -659,6 +658,10 @@
       });
     });
 
+    // v4.0 — owner DNS panel no longer renders a Retry DNS button. Retrying
+    // a stuck Cloudflare push is an operator concern (admin console). The
+    // handler stays here as a no-op safety net in case any cached older
+    // markup is still on the page.
     root.querySelectorAll('[data-dns-retry]').forEach((b) => {
       b.addEventListener('click', async () => {
         b.disabled = true;
