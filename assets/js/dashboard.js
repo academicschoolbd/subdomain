@@ -1,0 +1,1348 @@
+/* ===========================================================================
+   institution.bd — Owner dashboard
+   v3.2 — sidebar shell, quick-access tiles, "My Domains" table, modal manager
+   =========================================================================== */
+(function () {
+  'use strict';
+  const App = window.App;
+
+  /* Footer year. */
+  const yEl = document.querySelector('[data-year]');
+  if (yEl) yEl.textContent = new Date().getFullYear();
+
+  const needAuth   = document.querySelector('[data-needs-auth]');
+  const dashRoot   = document.querySelector('[data-dash-root]');
+  const manageBg   = document.querySelector('[data-manage-modal]');
+  const manageBody = document.querySelector('[data-manage-body]');
+
+  /* The user must be signed in to even see the dashboard shell. */
+  if (!App.isAuthed()) {
+    if (needAuth) needAuth.hidden = false;
+    return;
+  }
+
+  /* In-memory cache of /claims/mine so the table can re-render without a
+     network round-trip every time the search box changes. */
+  let _claims = [];
+  let _filter = { q: '', status: 'any' };
+
+  /* ---------------------------------------------------------------- */
+  /*  Boot — verify session, load user/settings, render UI             */
+  /* ---------------------------------------------------------------- */
+  App.api('/auth/me').then((r) => {
+    App.setSession(null, r.user);
+    if (dashRoot) dashRoot.hidden = false;
+    renderBanner();
+    renderAccountCard();
+    wirePaneSwitcher();
+    wireFilters();
+    wireManageModal();
+    loadDomains();
+  }).catch((e) => {
+    if (e && e.status === 401) {
+      App.clearSession();
+      if (needAuth) needAuth.hidden = false;
+      if (dashRoot) dashRoot.hidden = true;
+    } else {
+      App.toast((e && e.detail) || 'Could not load your account', 'error');
+    }
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  Banner — Stay Connected (community + page-like + creator follow) */
+  /* ---------------------------------------------------------------- */
+  async function renderBanner() {
+    const titleEl   = document.querySelector('[data-banner-title]');
+    const subEl     = document.querySelector('[data-banner-sub]');
+    const commLink  = document.querySelector('[data-banner-community]');
+    const likeLink  = document.querySelector('[data-banner-like]');
+    const credLink  = document.querySelector('[data-banner-creator]');
+    const credText  = document.querySelector('[data-banner-creator-text]');
+
+    let s = null;
+    try { s = await App.getSettings(); } catch (e) { return; }
+
+    const wa  = (s && s.whatsapp) || {};
+    const site = (s && s.site) || {};
+    const brand = site.name || 'institution.bd';
+    if (titleEl) titleEl.textContent = `Stay Connected with ${brand}`;
+    if (subEl)   subEl.textContent   = wa.community_subtitle || 'Join our community for support, tips & updates. Like our page to never miss new features!';
+
+    // Community URL — falls back to disabling the button if no link is set
+    // (admin can configure it from /admin → Integrations).
+    document.querySelectorAll('[data-banner-community]').forEach((el) => {
+      if (wa.community_url) {
+        el.setAttribute('href', wa.community_url);
+        el.classList.remove('is-disabled');
+      } else if (wa.support_url) {
+        el.setAttribute('href', wa.support_url);
+      } else {
+        el.setAttribute('href', '#');
+        el.classList.add('is-disabled');
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          App.toast('Community link not configured yet. Ask the admin to set it.', 'error');
+        });
+      }
+    });
+
+    // "Like our page" + "Follow creator" — point at the WhatsApp support
+    // chat as a sensible default; admins can later expose dedicated FB
+    // links via the integrations panel if they want.
+    document.querySelectorAll('[data-banner-like], [data-banner-creator]').forEach((el) => {
+      const url = wa.support_url || wa.community_url || '#';
+      el.setAttribute('href', url);
+      if (url === '#') {
+        el.classList.add('is-disabled');
+        el.addEventListener('click', (e) => { e.preventDefault(); });
+      }
+    });
+
+    // The original screenshot says "Follow Creator: Aminul" — keep the same
+    // pattern, but only render a name if one is configured. Otherwise we
+    // just show "Follow Creator".
+    const creator = (site && site.creator_name) || '';
+    if (credText) {
+      credText.textContent = creator ? ('Follow Creator: ' + creator) : 'Follow Creator';
+    }
+    if (credLink && !credLink.getAttribute('href')) credLink.setAttribute('href', '#');
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Sidebar pane switcher                                            */
+  /* ---------------------------------------------------------------- */
+  function wirePaneSwitcher() {
+    const buttons = document.querySelectorAll('[data-pane-btn]');
+    const panes   = document.querySelectorAll('[data-pane]');
+    buttons.forEach((b) => {
+      b.addEventListener('click', () => {
+        const name = b.getAttribute('data-pane-btn');
+        buttons.forEach((x) => x.classList.toggle('active', x === b));
+        panes.forEach((p) => { p.hidden = p.getAttribute('data-pane') !== name; });
+        // The Settings pane mounts the account-card the first time it's
+        // opened so we don't waste a render on the Overview path.
+        if (name === 'settings') renderAccountCard();
+        if (name === 'support')  renderSupportPayments();
+
+        // v4.5 — instant-response feel: collapse the global mobile drawer
+        // (if open) and snap the pane content to the top of the viewport
+        // so the user sees the new pane immediately on phones / tablets.
+        const drawer = document.querySelector('[data-nav-mobile]');
+        if (drawer && drawer.classList.contains('open')) {
+          drawer.classList.remove('open');
+          const t = document.querySelector('[data-nav-toggle]');
+          if (t) t.setAttribute('aria-expanded', 'false');
+        }
+        if (window.matchMedia && window.matchMedia('(max-width: 899px)').matches) {
+          const main = document.querySelector('.dash-main');
+          if (main && main.scrollIntoView) {
+            main.scrollIntoView({ behavior: 'auto', block: 'start' });
+          }
+        }
+      });
+    });
+
+    // Sign-out button in the sidebar foot.
+    document.querySelectorAll('[data-signout]').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        App.clearSession();
+        location.href = '/';
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Quick-access tiles (Overview)                                    */
+  /* ---------------------------------------------------------------- */
+  function renderQuickTiles() {
+    const host = document.querySelector('[data-quick-host]');
+    if (!host) return;
+    const total      = _claims.length;
+    const verified   = _claims.filter((c) => c.status === 'verified').length;
+    const pending    = _claims.filter((c) => c.status === 'pending').length;
+    const actionable = _claims.filter((c) => c.status === 'needs_info' || c.status === 'rejected' || c.status === 'suspended' || (c.status === 'verified' && c.dns_status === 'error')).length;
+
+    const tile = (kind, ico, num, label, hint, filter) => `
+      <button class="quick-tile quick-tile--${kind}" type="button" data-quick-filter="${filter || ''}">
+        <span class="quick-tile__ico" aria-hidden="true">${ico}</span>
+        <span class="quick-tile__num">${num}</span>
+        <span class="quick-tile__lab">${label}</span>
+        ${hint ? `<span class="quick-tile__hint">${hint}</span>` : ''}
+      </button>`;
+
+    host.innerHTML =
+      tile('total',
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+        total, 'Total domains', 'Across both brands', 'any')
+      + tile('verified',
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+        verified, 'Verified & live', verified ? 'SSL on, DNS published' : 'Awaiting first approval', 'verified')
+      + tile('pending',
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+        pending, 'Pending review', pending ? 'Usually < 24 h' : 'You\'re all caught up', 'pending')
+      + tile('action',
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        actionable, 'Action needed', actionable ? 'Tap to review' : 'Nothing for you to fix', 'action');
+
+    host.querySelectorAll('[data-quick-filter]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const f = b.getAttribute('data-quick-filter') || 'any';
+        const sel = document.querySelector('[data-domains-status]');
+        // "action" is a synthetic filter — map it onto needs_info.
+        const target = (f === 'action') ? 'needs_info' : f;
+        if (sel) sel.value = target;
+        _filter.status = target;
+        renderDomainsTable();
+        // Smooth-scroll to the table for clarity.
+        document.querySelector('[data-domains-table]')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Domains table                                                    */
+  /* ---------------------------------------------------------------- */
+  function wireFilters() {
+    const form  = document.querySelector('[data-domains-form]');
+    const qEl   = document.querySelector('[data-domains-q]');
+    const sEl   = document.querySelector('[data-domains-status]');
+    if (!form) return;
+    form.addEventListener('submit', (e) => e.preventDefault());
+    if (qEl) {
+      const debounced = App.debounce(() => {
+        _filter.q = (qEl.value || '').toLowerCase().trim();
+        renderDomainsTable();
+      }, 120);
+      qEl.addEventListener('input', debounced);
+    }
+    if (sEl) {
+      sEl.addEventListener('change', () => {
+        _filter.status = sEl.value;
+        renderDomainsTable();
+      });
+    }
+  }
+
+  function loadDomains() {
+    const tbody = document.querySelector('[data-domains-body]');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5"><div class="skeleton" style="height:48px;"></div></td></tr>';
+    App.api('/claims/mine').then((r) => {
+      _claims = (r && r.claims) || [];
+      const cnt = document.querySelector('[data-domain-count]');
+      if (cnt) {
+        cnt.textContent = _claims.length;
+        cnt.hidden = _claims.length === 0;
+      }
+      renderQuickTiles();
+      renderDomainsTable();
+    }).catch((e) => {
+      if (e && e.status === 401) {
+        App.clearSession();
+        if (needAuth) needAuth.hidden = false;
+        if (dashRoot) dashRoot.hidden = true;
+        return;
+      }
+      if (tbody) tbody.innerHTML =
+        '<tr><td colspan="5" class="text-danger">' +
+        App.escapeHtml((e && e.detail) || 'Could not load') +
+        '</td></tr>';
+    });
+  }
+
+  function statusPill(s) {
+    const map = {
+      verified:  ['Verified', 'badge--verified'],
+      pending:   ['Pending',  'badge--pending'],
+      needs_info:['Needs info','badge--warning'],
+      rejected:  ['Rejected', 'badge--danger'],
+      seeded:    ['Seeded',   'badge--muted'],
+      suspended: ['Suspended','badge--danger'],
+    };
+    const [label, cls] = map[s] || [s, ''];
+    return `<span class="badge ${cls}">${App.escapeHtml(label)}</span>`;
+  }
+
+  /* v4.1 — render the "Expires At" cell + Renew button.
+     Three colour states:
+       expired (days < 0)        → red badge, Renew is primary CTA
+       expiring soon (days ≤ 30) → amber badge, Renew is offered
+       healthy (days > 30)       → muted text, Renew is shown as ghost
+     Pre-v4.1 verified rows (no expires_at) keep the old "Free · no expiry"
+     copy so existing installs don't suddenly look broken. */
+  function expiryCell(c) {
+    if (c.status !== 'verified') return '<span class="text-muted">—</span>';
+    if (!c.expires_at) return '<span class="text-muted">Free · no expiry</span>';
+    const d  = App.fmtDate(c.expires_at);
+    const dt = c.days_to_expiry;
+    if (dt == null) return App.escapeHtml(d);
+    if (dt < 0)    return `<span class="badge badge--danger" title="${App.escapeHtml(d)}">Expired ${-dt}d ago</span>`;
+    if (dt <= 30)  return `<span class="badge badge--warning" title="${App.escapeHtml(d)}">In ${dt}d · ${App.escapeHtml(d)}</span>`;
+    return `<span class="text-muted" title="In ${dt} days">${App.escapeHtml(d)}</span>`;
+  }
+  function renewButton(c) {
+    if (c.status !== 'verified') return '';
+    if (!c.expires_at) return '';            // legacy "no expiry" claim
+    const dt = c.days_to_expiry;
+    // Always allow renewal — a customer should be able to top up early too.
+    // Visual emphasis follows dt: expired/<7d → primary, ≤30d → outline, else ghost.
+    const cls = (dt != null && dt < 0)         ? 'btn--primary'
+              : (dt != null && dt <= 7)        ? 'btn--primary'
+              : (dt != null && dt <= 30)       ? 'btn--outline'
+              :                                  'btn--ghost';
+    return `<button class="btn btn--sm ${cls}" type="button" data-renew="${c.id}">Renew</button>`;
+  }
+  function renderDomainsTable() {
+    const tbody = document.querySelector('[data-domains-body]');
+    if (!tbody) return;
+
+    let rows = _claims.slice();
+    if (_filter.status && _filter.status !== 'any') {
+      rows = rows.filter((c) => c.status === _filter.status);
+    }
+    if (_filter.q) {
+      rows = rows.filter((c) =>
+        (c.subdomain || '').toLowerCase().includes(_filter.q) ||
+        (c.name_en   || '').toLowerCase().includes(_filter.q) ||
+        (c.slug      || '').toLowerCase().includes(_filter.q)
+      );
+    }
+
+    if (!rows.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="5">
+          <div class="dash-empty">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <p>${_claims.length === 0
+                ? 'No domains found. <a href="/claim.php" class="link">Register one now</a>'
+                : 'No domains match this filter.'}</p>
+          </div>
+        </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map((c) => {
+      return `
+        <tr data-row="${c.id}">
+          <td data-label="Domain">
+            <div class="dash-domain">
+              <span class="dash-domain__logo">${App.escapeHtml(App.initialsOf(c.name_en || c.slug))}</span>
+              <div>
+                <div class="dash-domain__name">${App.escapeHtml(c.subdomain || (c.slug + '.' + c.brand))}</div>
+                <div class="dash-domain__meta">${App.escapeHtml(c.name_en || c.slug)}${c.dns_status ? ' · DNS · ' + App.escapeHtml(c.dns_status) : ''}</div>
+              </div>
+            </div>
+          </td>
+          <td data-label="Status">${statusPill(c.status)}</td>
+          <td data-label="Submitted">${App.escapeHtml(App.fmtDate(c.created_at))}</td>
+          <td data-label="Expires">${expiryCell(c)}</td>
+          <td data-label="Action" class="text-right">
+            <div class="dash-row-actions">
+              ${c.status === 'verified'
+                ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(c.subdomain)}">Open</a>`
+                : ''}
+              ${renewButton(c)}
+              <button class="btn btn--sm" type="button" data-manage="${c.id}">Manage</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-manage]').forEach((b) => {
+      b.addEventListener('click', () => openManage(parseInt(b.getAttribute('data-manage'), 10)));
+    });
+    tbody.querySelectorAll('[data-renew]').forEach((b) => {
+      b.addEventListener('click', () => openRenewModal(parseInt(b.getAttribute('data-renew'), 10)));
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Manage modal — full edit/upload/notice forms                     */
+  /* ---------------------------------------------------------------- */
+  function wireManageModal() {
+    const close = document.querySelector('[data-manage-close]');
+    if (close) close.addEventListener('click', closeManage);
+    if (manageBg) manageBg.addEventListener('click', (e) => {
+      if (e.target === manageBg) closeManage();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && manageBg && manageBg.classList.contains('open')) closeManage();
+    });
+  }
+  function closeManage() {
+    if (manageBg) manageBg.classList.remove('open');
+  }
+
+  function imgBlock(url, label) {
+    if (!url) return `<div class="upload-thumb upload-thumb--empty">${App.escapeHtml(label)}</div>`;
+    return `<img src="${App.escapeHtml(url)}" alt="" class="upload-thumb" />`;
+  }
+
+  function dnsPanel(c) {
+    if (c.status !== 'verified') return '';
+    const fqdn = c.subdomain;
+    const livePill = c.dns_status === 'live'
+      ? '<span class="badge badge--verified">Live · auto-SSL</span>'
+      : (c.dns_status === 'manual'
+          ? '<span class="badge">Manual DNS</span>'
+          : (c.dns_status === 'error'
+              ? '<span class="badge badge--danger">DNS error</span>'
+              : '<span class="badge">Pending</span>'));
+    // v3.3 — don't leak operator-level Cloudflare config copy into the
+    // owner UI. The DB stores `dns_message` strings like "Cloudflare not
+    // configured for institution.bd" so the *admin* knows why a claim is
+    // in `manual` mode — that's a platform concern, not the owner's. We
+    // only surface the message when it represents a real, user-actionable
+    // upstream error (dns_status = 'error'), and even then we strip any
+    // sentence that mentions Cloudflare-internal state.
+    let visibleMsg = '';
+    if (c.dns_status === 'error' && c.dns_message) {
+      const msg = String(c.dns_message);
+      if (!/cloudflare/i.test(msg)) visibleMsg = msg;
+    }
+    return `
+      <section class="dns-panel">
+        <header class="dns-panel__head">
+          <div class="dns-panel__lead">
+            <h4 style="margin:0;">DNS</h4>
+            <p class="text-muted" style="margin:.2em 0;">Where requests for <code>${App.escapeHtml(fqdn)}</code> currently go.</p>
+          </div>
+          ${livePill}
+        </header>
+        ${visibleMsg ? `<p class="text-danger" style="margin:.4em 0;font-size:.88rem;">${App.escapeHtml(visibleMsg)}</p>` : ''}
+        <div class="dns-panel__actions">
+          <a class="btn btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(fqdn)}">Open ${App.escapeHtml(fqdn)} →</a>
+        </div>
+      </section>`;
+  }
+
+  function openManage(id) {
+    const c = _claims.find((x) => x.id === id);
+    if (!c) { App.toast('Could not find that domain', 'error'); return; }
+    manageBg.classList.add('open');
+    // v3.2 — registrar-style tabbed manage modal. For verified domains we
+    // open straight to "DNS records" so users see what they came for. For
+    // pending/needs-info/rejected/seeded claims (which don't have DNS yet)
+    // we default to the Profile tab.
+    const isVerified = (c.status === 'verified');
+    const initialTab = isVerified ? 'dns' : 'profile';
+
+    const tabs = [
+      { id: 'dns',     label: 'DNS records', show: isVerified },
+      { id: 'ns',      label: 'Nameservers', show: isVerified },
+      { id: 'profile', label: 'Profile',     show: true },
+      { id: 'brand',   label: 'Branding',    show: true },
+      { id: 'docs',    label: 'Documents',   show: true },
+      { id: 'notices', label: 'Notices',     show: isVerified },
+    ].filter((t) => t.show);
+
+    manageBody.innerHTML = `
+      <header class="manage-head">
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <div>
+            <h2 style="margin:0;">${App.escapeHtml(c.name_en || c.subdomain)}</h2>
+            <p class="text-muted" style="margin:.2em 0;"><code>${App.escapeHtml(c.subdomain)}</code></p>
+            <div class="badges">${statusPill(c.status)} <span class="badge badge--brand">${App.escapeHtml(c.brand)}</span></div>
+          </div>
+          ${isVerified ? `<a class="btn btn--sm" target="_blank" rel="noopener" href="https://${App.escapeHtml(c.subdomain)}">Open ${App.escapeHtml(c.subdomain)} →</a>` : ''}
+        </div>
+      </header>
+
+      ${c.review_notes ? `<p class="text-muted mt-3"><strong>Reviewer note:</strong> ${App.escapeHtml(c.review_notes)}</p>` : ''}
+
+      <nav class="tabs mt-3" data-manage-tabs>
+        ${tabs.map((t) => `
+          <button class="tab${t.id === initialTab ? ' active' : ''}" type="button" data-manage-tab="${t.id}">${App.escapeHtml(t.label)}</button>
+        `).join('')}
+      </nav>
+
+      <!-- ============= DNS records pane (default for verified) ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="dns">
+        ${dnsPanel(c)}
+        <div class="card dash-card mt-3" style="padding:16px 18px;">
+          <h4 style="margin:0 0 4px;">Manage DNS records</h4>
+          <p class="text-muted" style="margin:0 0 6px;font-size:.9rem;">
+            Edit the records that point <code>${App.escapeHtml(c.subdomain)}</code> at your hosting.
+            Use <code>@</code> for the apex; A / AAAA / CNAME / TXT / MX / NS are supported.
+          </p>
+          <div data-dns-host="${c.id}"></div>
+        </div>
+      </section>` : ''}
+
+      <!-- ============= Nameservers pane ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="ns" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Nameservers</h4>
+          <p class="text-muted" style="margin:0 0 10px;">
+            Your subdomain is hosted on <strong>${App.escapeHtml(c.brand)}</strong>'s nameservers — you don't change these.
+            They're listed here so you can verify propagation.
+          </p>
+          <div class="dash-table-wrap" data-ns-host="${c.id}">
+            <div class="skeleton" style="height:80px;"></div>
+          </div>
+          <p class="text-muted mt-3" style="font-size:.88rem;">
+            Want different nameservers for a sub-label (e.g. <code>customer.${App.escapeHtml(c.subdomain)}</code>)?
+            Add an <code>NS</code> record from the <a href="#" data-manage-tab-jump="dns">DNS records</a> tab.
+          </p>
+        </div>
+      </section>` : ''}
+
+      <!-- ============= Profile pane ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="profile" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Institution profile</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">Shown on the public <code>${App.escapeHtml(c.subdomain)}</code> page.</p>
+          <form data-form-profile="${c.id}" class="form-grid">
+            <div class="field"><label class="label">Name (English)</label><input name="name_en" value="${App.escapeHtml(c.name_en || '')}" /></div>
+            <div class="field"><label class="label">নাম (বাংলা)</label><input name="name_bn" value="${App.escapeHtml(c.name_bn || '')}" /></div>
+            <div class="field"><label class="label">Category</label><input name="category" value="${App.escapeHtml(c.category || '')}" /></div>
+            <div class="field"><label class="label">EIIN</label><input name="eiin" value="${App.escapeHtml(c.eiin || '')}" /></div>
+            <div class="field"><label class="label">Division</label>
+              <select name="division" data-bd-division>
+                <option value="">— Select division —</option>
+              </select></div>
+            <div class="field"><label class="label">District</label>
+              <select name="district" data-bd-district>
+                <option value="">— Select division first —</option>
+              </select></div>
+            <div class="field"><label class="label">Upazila</label>
+              <select name="upazila" data-bd-upazila>
+                <option value="">— Select district first —</option>
+              </select></div>
+            <div class="field field--wide"><label class="label">Address</label><input name="address" value="${App.escapeHtml(c.address || '')}" /></div>
+            <div class="field"><label class="label">Contact name</label><input name="contact_name" value="${App.escapeHtml(c.contact_name || '')}" /></div>
+            <div class="field"><label class="label">Contact phone</label><input name="contact_phone" value="${App.escapeHtml(c.contact_phone || '')}" /></div>
+            <div class="field"><label class="label">Contact email</label><input name="contact_email" value="${App.escapeHtml(c.contact_email || '')}" /></div>
+            <div class="field"><label class="label">Website</label><input name="website" value="${App.escapeHtml(c.website || '')}" /></div>
+            <div class="field field--wide"><label class="label">About (English)</label><textarea name="about_en" rows="3">${App.escapeHtml(c.about_en || '')}</textarea></div>
+            <div class="field field--wide"><label class="label">পরিচিতি (বাংলা)</label><textarea name="about_bn" rows="3">${App.escapeHtml(c.about_bn || '')}</textarea></div>
+            <div class="field field--wide text-right"><button class="btn btn--primary" type="submit">Save changes</button></div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============= Branding pane (logo + banner) ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="brand" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Logo &amp; banner</h4>
+          <div class="grid-2 mt-2">
+            <div>
+              <p class="label">Logo</p>
+              ${imgBlock(c.logo_url, 'No logo yet')}
+              <form data-form-image="${c.id}" data-kind="logo" class="mt-2"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload logo</button></form>
+            </div>
+            <div>
+              <p class="label">Banner</p>
+              ${imgBlock(c.banner_url, 'No banner yet')}
+              <form data-form-image="${c.id}" data-kind="banner" class="mt-2"><input type="file" name="file" accept="image/jpeg,image/png,image/webp" /><button class="btn btn--sm mt-2" type="submit">Upload banner</button></form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============= Documents pane ============= -->
+      <section class="manage-pane mt-3" data-manage-pane="docs" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Verification documents</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">EIIN certificate, board letter, trade license or admin NID. Only admins can read these.</p>
+          <form data-form-doc="${c.id}" class="flex" style="flex-wrap:wrap;gap:8px;">
+            <select name="doc_type">
+              <option value="eiin_certificate">EIIN certificate</option>
+              <option value="board_letter">Board letter</option>
+              <option value="trade_license">Trade license</option>
+              <option value="nid">Admin NID</option>
+              <option value="other">Other</option>
+            </select>
+            <input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" />
+            <button class="btn btn--sm" type="submit">Upload document</button>
+          </form>
+          <div data-docs="${c.id}" class="docs-list mt-3"></div>
+        </div>
+      </section>
+
+      <!-- ============= Notices pane ============= -->
+      ${isVerified ? `
+      <section class="manage-pane mt-3" data-manage-pane="notices" hidden>
+        <div class="card dash-card" style="padding:18px 20px;">
+          <h4 style="margin:0 0 6px;">Notice board</h4>
+          <p class="text-muted" style="margin:0 0 10px;font-size:.9rem;">Posted notices show on <code>${App.escapeHtml(c.subdomain)}</code>.</p>
+          <form data-form-notice="${c.id}" class="form-grid">
+            <div class="field field--wide"><label class="label">Title</label><input name="title" required /></div>
+            <div class="field field--wide"><label class="label">Body</label><textarea name="body" rows="3" required></textarea></div>
+            <div class="field field--wide flex-between">
+              <label><input type="checkbox" name="pinned" /> Pin to top</label>
+              <button class="btn btn--primary" type="submit">Publish notice</button>
+            </div>
+          </form>
+          <div data-notices="${c.id}" class="mt-3"></div>
+        </div>
+      </section>` : ''}
+
+      <footer class="manage-foot mt-4">
+        ${['pending','needs_info','rejected'].includes(c.status)
+          ? `<button class="btn btn--ghost btn--danger-text" data-withdraw="${c.id}" type="button">Withdraw claim</button>`
+          : '<span></span>'}
+        <button class="btn" type="button" data-manage-close-2>Close</button>
+      </footer>
+    `;
+
+    // Tab switcher.
+    const panes = manageBody.querySelectorAll('[data-manage-pane]');
+    manageBody.querySelectorAll('[data-manage-tab]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const want = b.getAttribute('data-manage-tab');
+        manageBody.querySelectorAll('[data-manage-tab]').forEach((x) => {
+          x.classList.toggle('active', x === b);
+        });
+        panes.forEach((p) => { p.hidden = p.getAttribute('data-manage-pane') !== want; });
+      });
+    });
+    // Inline anchors that jump between tabs (e.g. "go to DNS records").
+    manageBody.querySelectorAll('[data-manage-tab-jump]').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const want = a.getAttribute('data-manage-tab-jump');
+        const btn = manageBody.querySelector('[data-manage-tab="' + want + '"]');
+        if (btn) btn.click();
+      });
+    });
+
+    wireManageInternals(c.id);
+    loadDocs(c.id);
+    if (isVerified) loadNotices(c.id);
+    if (isVerified) loadDnsRecords(c.id);
+    if (isVerified) loadNameservers(c.id, c.brand);
+    const x = manageBody.querySelector('[data-manage-close-2]');
+    if (x) x.addEventListener('click', closeManage);
+
+    // BD-locations cascade for the per-claim profile form inside the modal.
+    if (window.BDLocations) {
+      const root = manageBody.querySelector('[data-form-profile]');
+      if (root) {
+        window.BDLocations.bind(
+          root.querySelector('[data-bd-division]'),
+          root.querySelector('[data-bd-district]'),
+          root.querySelector('[data-bd-upazila]'),
+          { division: c.division || '', district: c.district || '', upazila: c.upazila || '' }
+        );
+      }
+    }
+  }
+
+  function wireManageInternals(id) {
+    const root = manageBody;
+
+    root.querySelectorAll('[data-form-profile]').forEach((f) => {
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(f);
+        const body = {};
+        fd.forEach((v, k) => { body[k] = v; });
+        try {
+          await App.api('/tenant/' + id + '/site', { method: 'PATCH', body });
+          App.toast('Profile saved', 'success');
+          loadDomains(); // refresh card meta
+        } catch (e2) { App.toast(e2.detail || 'Save failed', 'error'); }
+      });
+    });
+
+    root.querySelectorAll('[data-form-image]').forEach((f) => {
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const kind = f.getAttribute('data-kind');
+        const fd = new FormData(f);
+        if (!fd.get('file') || fd.get('file').size === 0) { App.toast('Pick a file', 'error'); return; }
+        fd.append('kind', kind);
+        try {
+          await App.api('/tenant/' + id + '/upload-image', { method: 'POST', body: fd });
+          App.toast(kind + ' updated', 'success');
+          await reloadAndReopen(id);
+        } catch (e2) { App.toast(e2.detail || 'Upload failed', 'error'); }
+      });
+    });
+
+    root.querySelectorAll('[data-form-doc]').forEach((f) => {
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(f);
+        if (!fd.get('file') || fd.get('file').size === 0) { App.toast('Pick a file', 'error'); return; }
+        try {
+          await App.api('/claims/' + id + '/documents', { method: 'POST', body: fd });
+          App.toast('Document uploaded', 'success');
+          f.reset();
+          loadDocs(id);
+        } catch (e2) { App.toast(e2.detail || 'Upload failed', 'error'); }
+      });
+    });
+
+    root.querySelectorAll('[data-form-notice]').forEach((f) => {
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(f);
+        const body = { title: fd.get('title'), body: fd.get('body'), pinned: !!fd.get('pinned') };
+        try {
+          await App.api('/tenant/' + id + '/notices', { method: 'POST', body });
+          App.toast('Notice published', 'success');
+          f.reset();
+          loadNotices(id);
+        } catch (e2) { App.toast(e2.detail || 'Publish failed', 'error'); }
+      });
+    });
+
+    root.querySelectorAll('[data-withdraw]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Permanently withdraw this claim? Uploaded documents will be deleted. This cannot be undone.')) return;
+        try {
+          await App.api('/claims/' + id, { method: 'DELETE' });
+          App.toast('Claim withdrawn', 'success');
+          closeManage();
+          loadDomains();
+        } catch (e2) { App.toast(e2.detail || 'Withdraw failed', 'error'); }
+      });
+    });
+
+    // v4.0 — owner DNS panel no longer renders a Retry DNS button. Retrying
+    // a stuck Cloudflare push is an operator concern (admin console). The
+    // handler stays here as a no-op safety net in case any cached older
+    // markup is still on the page.
+    root.querySelectorAll('[data-dns-retry]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        const orig = b.textContent;
+        b.textContent = 'Retrying…';
+        try {
+          const r = await App.api('/admin/claims/' + id + '/dns-retry', { method: 'POST' });
+          App.toast(r.ok ? 'DNS retry submitted' : (r.dns && r.dns.message) || 'DNS error',
+                    r.ok ? 'success' : 'error');
+          await reloadAndReopen(id);
+        } catch (e2) {
+          App.toast(e2.status === 403
+            ? 'Only admins can retry DNS — please contact support.'
+            : (e2.detail || 'Retry failed'), 'error');
+        } finally {
+          b.disabled = false; b.textContent = orig;
+        }
+      });
+    });
+  }
+
+  /* Re-fetch the user's claims and re-open the same modal so the latest
+     image/profile/DNS data shows up immediately after a save. */
+  async function reloadAndReopen(id) {
+    try {
+      const r = await App.api('/claims/mine');
+      _claims = (r && r.claims) || [];
+      renderQuickTiles();
+      renderDomainsTable();
+      const stillThere = _claims.find((c) => c.id === id);
+      if (stillThere) openManage(id);
+    } catch (e) { /* keep modal as-is */ }
+  }
+
+  function loadDocs(id) {
+    const host = manageBody.querySelector('[data-docs="' + id + '"]');
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton" style="height:30px;"></div>';
+    App.api('/tenant/' + id + '/site').then((r) => {
+      const docs = r.documents || [];
+      if (!docs.length) { host.innerHTML = '<p class="text-muted" style="font-size:.9rem;">No documents uploaded yet.</p>'; return; }
+      host.innerHTML = docs.map((d) =>
+        '<div class="doc-row"><span>📎 ' + App.escapeHtml(d.doc_type) + ' · ' + App.escapeHtml(d.filename) +
+        '</span><span class="text-muted">' + App.escapeHtml(App.fmtDate(d.uploaded_at)) + '</span></div>'
+      ).join('');
+    });
+  }
+
+  function loadNotices(id) {
+    const host = manageBody.querySelector('[data-notices="' + id + '"]');
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton" style="height:30px;"></div>';
+    App.api('/tenant/' + id + '/notices').then((r) => {
+      const list = r.notices || [];
+      if (!list.length) { host.innerHTML = '<p class="text-muted">No notices yet.</p>'; return; }
+      host.innerHTML = list.map((n) => `
+        <div class="notice-row">
+          <div>${n.pinned ? '<span class="badge badge--brand">Pinned</span> ' : ''}<strong>${App.escapeHtml(n.title)}</strong>
+            <p style="margin:.3em 0;white-space:pre-wrap;">${App.escapeHtml(n.body)}</p>
+            <small class="text-muted">${App.escapeHtml(App.fmtDate(n.created_at))}</small>
+          </div>
+          <button class="btn btn--ghost btn--sm" data-del-notice="${id}:${n.id}">Delete</button>
+        </div>`).join('');
+      host.querySelectorAll('[data-del-notice]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          if (!confirm('Delete this notice?')) return;
+          const [iid, nid] = b.getAttribute('data-del-notice').split(':');
+          await App.api('/tenant/' + iid + '/notices/' + nid, { method: 'DELETE' });
+          loadNotices(iid);
+        });
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Settings — account profile + change password                     */
+  /* ---------------------------------------------------------------- */
+  function renderAccountCard() {
+    const u = App.getUser() || {};
+    const host = document.querySelector('[data-account-card]');
+    if (!host) return;
+    const v = (x) => App.escapeHtml(x || '');
+    host.innerHTML = `
+      <article class="card">
+        <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
+          <div>
+            <h3 style="margin:0;">Your profile</h3>
+            <p class="text-muted" style="margin:.2em 0;">Used on every claim you submit.</p>
+          </div>
+          ${u.profile_complete
+              ? '<span class="badge badge--verified">Profile complete</span>'
+              : '<span class="badge badge--warning">Profile incomplete</span>'}
+        </div>
+        <form data-account-form class="form-grid mt-3">
+          <div class="field"><label class="label">Full name</label>
+            <input name="name" value="${v(u.name)}" required maxlength="120" /></div>
+          <div class="field"><label class="label">Mobile (Bangladesh)</label>
+            <input name="mobile" value="${v(u.mobile || u.phone)}" required maxlength="20" placeholder="01712345678" /></div>
+          <div class="field"><label class="label">পদবি / Designation</label>
+            <input name="designation_bn" value="${v(u.designation_bn)}" required maxlength="120" /></div>
+          <div class="field"><label class="label">প্রতিষ্ঠানের নাম / Institution name</label>
+            <input name="institution_name" value="${v(u.institution_name)}" required maxlength="200" /></div>
+          <div class="field"><label class="label">বিভাগ / Division</label>
+            <select name="division" required>
+              <option value="">— Select division —</option>
+            </select></div>
+          <div class="field"><label class="label">জেলা / District</label>
+            <select name="district" required>
+              <option value="">— Select division first —</option>
+            </select></div>
+          <div class="field field--wide"><label class="label">উপজেলা / Upazila / Thana</label>
+            <select name="upazila" required>
+              <option value="">— Select district first —</option>
+            </select></div>
+          <div class="field field--wide text-right">
+            <button class="btn btn--primary" type="submit">Save profile</button>
+          </div>
+        </form>
+
+        <details class="mt-3">
+          <summary style="cursor:pointer;font-weight:600;">Change password</summary>
+          <form data-pwd-form class="form-grid mt-2">
+            <div class="field"><label class="label">Current password ${u && u.provider === 'email' ? '<span class="text-danger">*</span>' : '<span class="text-muted">(only if you set one)</span>'}</label>
+              <input name="current_password" type="password" autocomplete="current-password" /></div>
+            <div class="field"><label class="label">New password (8+ chars)</label>
+              <input name="new_password" type="password" minlength="8" autocomplete="new-password" required /></div>
+            <div class="field field--wide text-right">
+              <button class="btn" type="submit">Update password</button>
+            </div>
+          </form>
+        </details>
+      </article>`;
+
+    // Wire the BD-locations cascade for the Settings pane account form. It
+    // round-trips with the existing free-text values: anything the user had
+    // saved before that doesn't match the canonical list is preserved as a
+    // "(saved)" sentinel option.
+    if (window.BDLocations) {
+      const f = host.querySelector('[data-account-form]');
+      if (f) {
+        window.BDLocations.bind(
+          f.querySelector('[name="division"]'),
+          f.querySelector('[name="district"]'),
+          f.querySelector('[name="upazila"]'),
+          { division: u.division || '', district: u.district || '', upazila: u.upazila || '' }
+        );
+      }
+    }
+
+    host.querySelector('[data-account-form]').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.currentTarget);
+      const body = {};
+      fd.forEach((v, k) => { body[k] = (v || '').toString().trim(); });
+      try {
+        const r = await App.api('/auth/profile', { method: 'PATCH', body });
+        if (r && r.user) { App.setSession(null, r.user); renderAccountCard(); }
+        App.toast('Profile saved', 'success');
+      } catch (e) {
+        if (e && e.errors) {
+          const first = Object.keys(e.errors)[0];
+          App.toast(e.errors[first], 'error');
+        } else { App.toast(e.detail || 'Save failed', 'error'); }
+      }
+    });
+
+    host.querySelector('[data-pwd-form]').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.currentTarget);
+      const body = {
+        current_password: (fd.get('current_password') || '').toString(),
+        new_password: (fd.get('new_password') || '').toString(),
+      };
+      try {
+        await App.api('/auth/change-password', { method: 'POST', body });
+        App.toast('Password updated', 'success');
+        ev.currentTarget.reset();
+      } catch (e) {
+        if (e && e.errors) {
+          const first = Object.keys(e.errors)[0];
+          App.toast(e.errors[first], 'error');
+        } else { App.toast(e.detail || 'Could not update password', 'error'); }
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Nameservers tab (registrar-style read-only list)          */
+  /* ---------------------------------------------------------------- */
+  async function loadNameservers(claimId, brand) {
+    const host = manageBody && manageBody.querySelector('[data-ns-host="' + claimId + '"]');
+    if (!host) return;
+    try {
+      const s = await App.getSettings();
+      const ns = (s && s.nameservers) || ['amir.ns.cloudflare.com', 'tia.ns.cloudflare.com'];
+      host.innerHTML = `
+        <table class="dash-table">
+          <thead><tr><th>#</th><th>Nameserver</th><th>Notes</th></tr></thead>
+          <tbody>
+            ${ns.map((n, i) => `
+              <tr>
+                <td>NS${i + 1}</td>
+                <td><code>${App.escapeHtml(n)}</code></td>
+                <td class="text-muted">
+                  Read-only · managed by ${App.escapeHtml(brand)}
+                  <button type="button" class="btn btn--ghost btn--sm" data-copy-ns="${App.escapeHtml(n)}" style="margin-left:8px;">Copy</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+      host.querySelectorAll('[data-copy-ns]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const v = b.getAttribute('data-copy-ns') || '';
+          try { await navigator.clipboard.writeText(v); App.toast('Copied ' + v, 'success'); }
+          catch { App.toast('Could not copy', 'error'); }
+        });
+      });
+    } catch (e) {
+      host.innerHTML = '<p class="text-muted">Could not load nameservers.</p>';
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — Support Developer payment methods (admin-managed)         */
+  /* ---------------------------------------------------------------- */
+  const PAY_BRAND = {
+    bkash:  { label: 'bKash',  color: '#e2136e' },
+    nagad:  { label: 'Nagad',  color: '#f47216' },
+    rocket: { label: 'Rocket', color: '#8a2be2' },
+    upay:   { label: 'Upay',   color: '#ec1b23' },
+    tap:    { label: 'Tap',    color: '#0ea5e9' },
+    bank:   { label: 'Bank',   color: '#0f766e' },
+    card:   { label: 'Card',   color: '#1f2937' },
+    paypal: { label: 'PayPal', color: '#003087' },
+    crypto: { label: 'Crypto', color: '#f59e0b' },
+    other:  { label: 'Other',  color: '#475569' },
+  };
+  let _paymentsLoaded = false;
+  function renderSupportPayments() {
+    const host = document.querySelector('[data-payments-host]');
+    if (!host || _paymentsLoaded) return;
+    host.innerHTML = '<div class="card"><div class="skeleton" style="height:120px;"></div></div>';
+    App.api('/support/payments').then((r) => {
+      _paymentsLoaded = true;
+      const items = (r && r.items) || [];
+      if (!items.length) { host.innerHTML = ''; return; }
+      host.innerHTML = `
+        <article class="card dash-support">
+          <h3 style="margin-top:0;">Support us with a tip</h3>
+          <p class="text-muted">Every contribution helps us keep institution.bd free for everyone. Send to any of the methods below.</p>
+          <div class="pay-grid">${items.map(payCard).join('')}</div>
+        </article>`;
+      host.querySelectorAll('[data-copy-pay]').forEach((b) => {
+        b.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const text = b.getAttribute('data-copy-pay') || '';
+          try {
+            await navigator.clipboard.writeText(text);
+            App.toast('Copied "' + text + '"', 'success');
+          } catch { App.toast('Could not copy', 'error'); }
+        });
+      });
+    }).catch(() => { host.innerHTML = ''; });
+  }
+  function payCard(p) {
+    const meta = PAY_BRAND[p.method] || PAY_BRAND.other;
+    const num = (p.number || '').trim();
+    return `
+      <div class="pay-card">
+        <header class="pay-card__head">
+          <span class="pay-card__pill" style="background:${meta.color};">${App.escapeHtml(meta.label)}</span>
+          <strong>${App.escapeHtml(p.label)}</strong>
+        </header>
+        ${num ? `
+          <div class="pay-card__num">
+            <code>${App.escapeHtml(num)}</code>
+            <button type="button" class="btn btn--sm" data-copy-pay="${App.escapeHtml(num)}">Copy</button>
+          </div>` : ''}
+        ${p.note ? `<p class="pay-card__note">${App.escapeHtml(p.note)}</p>` : ''}
+        ${p.qr_url ? `<a class="pay-card__qr" href="${App.escapeHtml(p.qr_url)}" target="_blank" rel="noopener">View QR →</a>` : ''}
+      </div>`;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v3.2 — DNS records manager (verified domains only)               */
+  /* ---------------------------------------------------------------- */
+  const DNS_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS'];
+
+  function dnsTypePill(type, status) {
+    const cls = status === 'live' ? 'badge--verified'
+              : status === 'error' ? 'badge--danger'
+              : 'badge';
+    return `<span class="badge ${cls}">${App.escapeHtml(type)}${status && status !== 'live' ? ' · ' + App.escapeHtml(status) : ''}</span>`;
+  }
+
+  async function loadDnsRecords(claimId) {
+    const host = manageBody && manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton" style="height:80px;"></div>';
+    try {
+      const r = await App.api('/tenant/' + claimId + '/dns');
+      const items = r.items || [];
+      // v3.3 — owner UI shouldn't reveal whether the upstream provider
+      // (Cloudflare) is configured or not. That's an operator concern.
+      // Show one neutral, user-friendly line instead.
+      const cfHint = '<span class="text-muted">Changes save instantly. New records start resolving worldwide within a few minutes.</span>';
+      host.innerHTML = `
+        <div class="flex-between" style="flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <p class="text-muted" style="margin:0;">Manage DNS records for <code>${App.escapeHtml(r.subdomain)}</code>. ${cfHint}</p>
+          <button class="btn btn--sm btn--primary" data-dns-add="${claimId}" type="button">+ Add record</button>
+        </div>
+        ${items.length ? `
+          <div class="dash-table-wrap">
+            <table class="dash-table dns-table">
+              <thead><tr>
+                <th>Type</th><th>Name</th><th>Content</th><th>TTL</th><th>Proxied</th><th class="text-right">Action</th>
+              </tr></thead>
+              <tbody>${items.map((d) => dnsRow(d, claimId, r.subdomain)).join('')}</tbody>
+            </table>
+          </div>` : `
+          <div class="dash-empty"><p>No DNS records yet — add one to start pointing this subdomain at your hosting.</p></div>`}
+      `;
+      wireDnsActions(claimId, r.subdomain, items);
+    } catch (e) {
+      host.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Could not load DNS records') + '</p>';
+    }
+  }
+  function dnsRow(d, claimId, subdomain) {
+    const fqdn = (d.name === '@' || d.name === '' || d.name === subdomain) ? subdomain : (d.name + '.' + subdomain);
+    return `
+      <tr data-dns-row="${d.id}">
+        <td>${dnsTypePill(d.type, d.cf_status || '')}</td>
+        <td><code>${App.escapeHtml(fqdn)}</code></td>
+        <td><code style="word-break:break-all;">${App.escapeHtml(d.content)}</code>${d.priority !== null && d.priority !== undefined ? ' <span class="text-muted">(prio ' + d.priority + ')</span>' : ''}</td>
+        <td>${d.ttl === 1 ? 'Auto' : App.escapeHtml(String(d.ttl))}</td>
+        <td>${d.proxied ? '☁︎' : '<span class="text-muted">—</span>'}</td>
+        <td class="text-right">
+          <button class="btn btn--sm" data-dns-edit="${d.id}" type="button">Edit</button>
+          <button class="btn btn--ghost btn--sm btn--danger-text" data-dns-del="${d.id}" type="button">Delete</button>
+        </td>
+      </tr>`;
+  }
+  function wireDnsActions(claimId, subdomain, items) {
+    const root = manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!root) return;
+    root.querySelectorAll('[data-dns-add]').forEach((b) => {
+      b.addEventListener('click', () => openDnsForm(claimId, subdomain, null));
+    });
+    root.querySelectorAll('[data-dns-edit]').forEach((b) => {
+      const id = parseInt(b.getAttribute('data-dns-edit'), 10);
+      const rec = items.find((x) => x.id === id);
+      b.addEventListener('click', () => rec && openDnsForm(claimId, subdomain, rec));
+    });
+    root.querySelectorAll('[data-dns-del]').forEach((b) => {
+      const id = parseInt(b.getAttribute('data-dns-del'), 10);
+      b.addEventListener('click', async () => {
+        if (!confirm('Delete this DNS record? This cannot be undone.')) return;
+        try {
+          await App.api('/tenant/' + claimId + '/dns/' + id, { method: 'DELETE' });
+          App.toast('Record deleted', 'success');
+          loadDnsRecords(claimId);
+        } catch (e) {
+          App.toast((e && e.detail) || 'Delete failed', 'error');
+        }
+      });
+    });
+  }
+  function openDnsForm(claimId, subdomain, rec) {
+    const host = manageBody.querySelector('[data-dns-host="' + claimId + '"]');
+    if (!host) return;
+    const isEdit = !!rec;
+    const safe = (v) => App.escapeHtml(v == null ? '' : String(v));
+    host.innerHTML = `
+      <article class="card dns-form">
+        <header class="flex-between" style="flex-wrap:wrap;gap:10px;">
+          <h4 style="margin:0;">${isEdit ? 'Edit DNS record' : 'Add DNS record'}</h4>
+          <button class="btn btn--ghost btn--sm" type="button" data-dns-cancel>Cancel</button>
+        </header>
+        <form data-dns-save="${claimId}" class="form-grid mt-2">
+          <div class="field"><label class="label">Type</label>
+            <select name="type" required>
+              ${DNS_TYPES.map((t) => `<option value="${t}" ${rec && rec.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label class="label">Name</label>
+            <input name="name" value="${safe(rec ? rec.name : '@')}" placeholder="@ for apex, or e.g. www, mail" required maxlength="120" />
+            <p class="hint">Use <code>@</code> for the apex (<code>${safe(subdomain)}</code>). Other labels are prepended.</p>
+          </div>
+          <div class="field field--wide"><label class="label">Content / Value</label>
+            <input name="content" value="${safe(rec ? rec.content : '')}" placeholder="e.g. 203.0.113.10  or  hostname.example.com" required maxlength="512" />
+          </div>
+          <div class="field"><label class="label">TTL (seconds)</label>
+            <input name="ttl" type="number" min="0" value="${safe(rec ? rec.ttl : 1)}" />
+            <p class="hint">1 = automatic / Cloudflare-default.</p>
+          </div>
+          <div class="field" data-dns-mx ${rec && rec.type === 'MX' ? '' : 'hidden'}>
+            <label class="label">Priority (MX only)</label>
+            <input name="priority" type="number" min="0" max="65535" value="${safe(rec && rec.priority != null ? rec.priority : 10)}" />
+          </div>
+          <div class="field field--wide" data-dns-proxy ${rec && ['A','AAAA','CNAME'].includes(rec.type) ? '' : 'hidden'}>
+            <label class="toggle-row">
+              <input type="checkbox" name="proxied" ${rec && rec.proxied ? 'checked' : ''} />
+              <span><strong>Proxy through Cloudflare (orange cloud)</strong><span class="text-muted"> — Cloudflare's automatic SSL and cache.</span></span>
+            </label>
+          </div>
+          <div class="field field--wide text-right">
+            <button class="btn btn--primary" type="submit">${isEdit ? 'Save changes' : 'Create record'}</button>
+          </div>
+        </form>
+      </article>`;
+    const form    = host.querySelector('[data-dns-save]');
+    const typeSel = form.querySelector('[name=type]');
+    const mxField = form.querySelector('[data-dns-mx]');
+    const proxyF  = form.querySelector('[data-dns-proxy]');
+    typeSel.addEventListener('change', () => {
+      const t = typeSel.value;
+      mxField.hidden = (t !== 'MX');
+      proxyF.hidden  = !['A', 'AAAA', 'CNAME'].includes(t);
+    });
+    host.querySelector('[data-dns-cancel]').addEventListener('click', () => loadDnsRecords(claimId));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        type:     (fd.get('type') || 'A').toString(),
+        name:     (fd.get('name') || '@').toString().trim() || '@',
+        content:  (fd.get('content') || '').toString().trim(),
+        ttl:      parseInt(fd.get('ttl') || '1', 10),
+        priority: fd.get('priority') ? parseInt(fd.get('priority'), 10) : null,
+        proxied:  !!fd.get('proxied'),
+      };
+      try {
+        if (isEdit) {
+          await App.api('/tenant/' + claimId + '/dns/' + rec.id, { method: 'PATCH', body: payload });
+          App.toast('Record updated', 'success');
+        } else {
+          await App.api('/tenant/' + claimId + '/dns', { method: 'POST', body: payload });
+          App.toast('Record created', 'success');
+        }
+        loadDnsRecords(claimId);
+      } catch (err) {
+        if (err && err.errors) {
+          const first = Object.keys(err.errors)[0];
+          App.toast(err.errors[first], 'error');
+        } else {
+          App.toast((err && err.detail) || 'Save failed', 'error');
+        }
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  v4.1 — Domain renewal flow (free auto-extend / paid request)     */
+  /* ---------------------------------------------------------------- */
+
+  /** Format a date like "12 May 2026" (locale-aware, avoids parseDate). */
+  function _shortDate(s) {
+    if (!s) return '—';
+    const d = new Date(String(s).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return App.escapeHtml(String(s));
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  async function openRenewModal(id) {
+    const c = _claims.find((x) => x.id === id);
+    if (!c) { App.toast('Could not find that domain', 'error'); return; }
+    // Re-use the manage modal as the surface — same DOM, fresh body.
+    if (!manageBg || !manageBody) return;
+    manageBg.classList.add('open');
+    manageBody.innerHTML = '<div class="skeleton" style="height:160px;"></div>';
+
+    // Pull the live renewal context (price + projected new expiry +
+    // whether there's already a pending request) and the configured
+    // payment methods in parallel.
+    let info = null, payments = [];
+    try {
+      info = await App.api('/tenant/' + id + '/renew');
+    } catch (e) {
+      manageBody.innerHTML = '<p class="text-danger">' + App.escapeHtml((e && e.detail) || 'Could not load renewal info') + '</p>';
+      return;
+    }
+    if (info.price_bdt > 0) {
+      try { const p = await App.api('/support/payments'); payments = (p && p.items) || []; }
+      catch { payments = []; }
+    }
+
+    renderRenewModal(c, info, payments);
+  }
+
+  function renderRenewModal(c, info, payments) {
+    const isPaid    = (info.price_bdt || 0) > 0;
+    const pending   = info.pending_renewal;
+    const close     = manageBody.querySelector('[data-manage-close-2]');
+    const expiresIn = info.expires_at
+      ? '<strong>' + _shortDate(info.expires_at) + '</strong>'
+      : '<span class="text-muted">no expiry on file</span>';
+    const projected = '<strong>' + _shortDate(info.projected_expires_at) + '</strong>';
+
+    // ---------- Already-pending state ----------
+    if (pending) {
+      manageBody.innerHTML = `
+        <header class="manage-head">
+          <h2 style="margin:0;">Renewal pending — ${App.escapeHtml(info.subdomain)}</h2>
+          <p class="text-muted" style="margin:.2em 0;">A renewal request was submitted on ${_shortDate(pending.created_at)}. The admin will mark it approved once your payment is confirmed.</p>
+        </header>
+        <div class="renew-card mt-3">
+          <div class="renew-card__row"><span>Status</span><span><span class="badge badge--warning">Awaiting confirmation</span></span></div>
+          <div class="renew-card__row"><span>Amount</span><span><strong>${pending.price_bdt > 0 ? '৳ ' + pending.price_bdt : 'Free'}</strong></span></div>
+          <div class="renew-card__row"><span>Current expiry</span><span>${expiresIn}</span></div>
+          <div class="renew-card__row"><span>New expiry on approval</span><span>${projected}</span></div>
+          ${pending.owner_message ? `<div class="renew-card__row"><span>Your note</span><span class="text-muted" style="font-style:italic;">${App.escapeHtml(pending.owner_message)}</span></div>` : ''}
+        </div>
+        <footer class="manage-foot mt-4">
+          <span></span>
+          <button class="btn" type="button" data-manage-close-2>Close</button>
+        </footer>`;
+      manageBody.querySelector('[data-manage-close-2]').addEventListener('click', closeManage);
+      return;
+    }
+
+    // ---------- Free auto-renew ----------
+    if (!isPaid) {
+      manageBody.innerHTML = `
+        <header class="manage-head">
+          <h2 style="margin:0;">Renew ${App.escapeHtml(info.subdomain)}</h2>
+          <p class="text-muted" style="margin:.2em 0;">Renewals are <strong>free</strong> on this platform. One click extends the term by ${info.term_days} days.</p>
+        </header>
+        <div class="renew-card mt-3">
+          <div class="renew-card__row"><span>Current expiry</span><span>${expiresIn}</span></div>
+          <div class="renew-card__row"><span>New expiry</span><span>${projected}</span></div>
+          <div class="renew-card__row"><span>Term</span><span>${info.term_days} days</span></div>
+          <div class="renew-card__row"><span>Price</span><span><strong>Free</strong></span></div>
+        </div>
+        <form data-renew-form="${c.id}" class="form-grid mt-3">
+          <div class="field field--wide">
+            <label class="label">Note (optional)</label>
+            <textarea name="message" rows="2" placeholder="Anything we should know? Leave blank to skip."></textarea>
+          </div>
+          <div class="field field--wide flex-between">
+            <button class="btn" type="button" data-manage-close-2>Cancel</button>
+            <button class="btn btn--primary" type="submit" data-renew-go>Renew now</button>
+          </div>
+        </form>`;
+      _wireRenewSubmit(c.id);
+      manageBody.querySelectorAll('[data-manage-close-2]').forEach((b) => b.addEventListener('click', closeManage));
+      return;
+    }
+
+    // ---------- Paid renewal — show payment instructions ----------
+    const PAY_BRAND = {
+      bkash:'bKash', nagad:'Nagad', rocket:'Rocket', upay:'Upay', tap:'Tap',
+      bank:'Bank', card:'Card', paypal:'PayPal', crypto:'Crypto', other:'Other',
+    };
+    const visiblePayments = (payments || []).filter((p) => p.number || p.note || p.qr_url);
+    manageBody.innerHTML = `
+      <header class="manage-head">
+        <h2 style="margin:0;">Renew ${App.escapeHtml(info.subdomain)}</h2>
+        <p class="text-muted" style="margin:.2em 0;">Pay ৳ ${info.price_bdt} via any of the methods below, then submit the request. The admin will confirm your payment and extend the expiry.</p>
+      </header>
+      <div class="renew-card mt-3">
+        <div class="renew-card__row"><span>Current expiry</span><span>${expiresIn}</span></div>
+        <div class="renew-card__row"><span>New expiry on approval</span><span>${projected}</span></div>
+        <div class="renew-card__row"><span>Term</span><span>${info.term_days} days</span></div>
+        <div class="renew-card__row"><span>Amount due</span><span><strong>৳ ${info.price_bdt}</strong></span></div>
+      </div>
+
+      <h4 class="mt-4">Pay with</h4>
+      ${visiblePayments.length ? `
+        <div class="pay-grid renew-pay-grid">
+          ${visiblePayments.map((p) => `
+            <div class="pay-card">
+              <header class="pay-card__head">
+                <span class="pay-card__pill" style="background:#0f766e;">${App.escapeHtml(PAY_BRAND[p.method] || p.method)}</span>
+                <strong>${App.escapeHtml(p.label)}</strong>
+              </header>
+              ${p.number ? `
+                <div class="pay-card__num">
+                  <code>${App.escapeHtml(p.number)}</code>
+                  <button type="button" class="btn btn--sm" data-copy="${App.escapeHtml(p.number)}">Copy</button>
+                </div>` : ''}
+              ${p.note ? `<p class="pay-card__note">${App.escapeHtml(p.note)}</p>` : ''}
+              ${p.qr_url ? `<a class="pay-card__qr" href="${App.escapeHtml(p.qr_url)}" target="_blank" rel="noopener">View QR →</a>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      ` : '<p class="text-muted">No payment methods are currently configured by the admin. Please contact support.</p>'}
+
+      <form data-renew-form="${c.id}" class="form-grid mt-3">
+        <div class="field field--wide">
+          <label class="label">Transaction reference (recommended)</label>
+          <textarea name="message" rows="2" placeholder="e.g. bKash TrxID: 9X8A2B1C — paid ৳ ${info.price_bdt} on …"></textarea>
+        </div>
+        <div class="field field--wide flex-between">
+          <button class="btn" type="button" data-manage-close-2>Cancel</button>
+          <button class="btn btn--primary" type="submit" data-renew-go>I've paid — submit request</button>
+        </div>
+      </form>`;
+    _wireRenewSubmit(c.id);
+    manageBody.querySelectorAll('[data-copy]').forEach((b) => {
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const txt = b.getAttribute('data-copy') || '';
+        try { await navigator.clipboard.writeText(txt); App.toast('Copied "' + txt + '"', 'success'); }
+        catch { App.toast('Could not copy', 'error'); }
+      });
+    });
+    manageBody.querySelectorAll('[data-manage-close-2]').forEach((b) => b.addEventListener('click', closeManage));
+  }
+
+  function _wireRenewSubmit(claimId) {
+    const form = manageBody.querySelector('[data-renew-form="' + claimId + '"]');
+    if (!form) return;
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const message = (fd.get('message') || '').toString().trim();
+      const btn = form.querySelector('[data-renew-go]');
+      const orig = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+      try {
+        const r = await App.api('/tenant/' + claimId + '/renew', {
+          method: 'POST', body: { message },
+        });
+        if (r.auto_renewed) {
+          App.toast('Renewed! New expiry saved.', 'success');
+        } else {
+          App.toast('Renewal request submitted — the admin will confirm shortly.', 'success');
+        }
+        closeManage();
+        loadDomains();
+      } catch (e) {
+        App.toast((e && e.detail) || 'Could not submit renewal', 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+      }
+    });
+  }
+})();
