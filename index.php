@@ -3,7 +3,7 @@
  * v5pro — Home page
  * Server-renders live stats for instant first paint.
  */
-$_initialStats = ['users_registered' => 0, 'claims_total' => 0, 'claims_pending' => 0, 'claims_rejected' => 0];
+$_initialStats = ['users_registered' => 0, 'claims_total' => 0];
 try {
     require_once __DIR__ . '/api/bootstrap.php';
     $pdo = db($CONFIG);
@@ -14,8 +14,6 @@ try {
     $_initialStats = [
         'users_registered' => (int)$pdo->query('SELECT COUNT(*) c FROM users')->fetch()['c'],
         'claims_total'     => $byStatus['verified'] + $byStatus['pending'] + $byStatus['needs_info'] + $byStatus['rejected'] + $byStatus['suspended'],
-        'claims_pending'   => $byStatus['pending'] + $byStatus['needs_info'],
-        'claims_rejected'  => $byStatus['rejected'] + $byStatus['suspended'],
     ];
 } catch (Throwable $_e) {}
 if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style($c=null){} }
@@ -65,7 +63,6 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
     </div>
     <div class="collapse navbar-collapse order-lg-2" id="mainNav">
       <ul class="navbar-nav mx-auto gap-1">
-        <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
         <li class="nav-item"><a class="nav-link" href="#brands">Brands</a></li>
         <li class="nav-item"><a class="nav-link" href="#how">How it works</a></li>
         <li class="nav-item"><a class="nav-link" href="/directory.php">Directory</a></li>
@@ -151,36 +148,92 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
       </span>
     </div>
     <div class="row g-3" data-live-stats>
-      <div class="col-6 col-md-3">
+      <div class="col-6">
         <div class="stat-tile-v5">
           <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
           <span class="stat-num" data-tile="users"><?= number_format($_initialStats['users_registered']) ?></span>
-          <span class="stat-label">Registered users</span>
+          <span class="stat-label">Total Members (মোট সদস্য)</span>
           <span class="stat-delta" data-tile-delta="users"></span>
         </div>
       </div>
-      <div class="col-6 col-md-3">
+      <div class="col-6">
         <div class="stat-tile-v5">
           <div class="stat-icon"><i class="bi bi-globe2"></i></div>
           <span class="stat-num" data-tile="claims_total"><?= number_format($_initialStats['claims_total']) ?></span>
-          <span class="stat-label">Domains registered</span>
+          <span class="stat-label">Total Registered Domains (মোট নিবন্ধিত ডোমেইন)</span>
           <span class="stat-delta" data-tile-delta="claims_total"></span>
         </div>
       </div>
-      <div class="col-6 col-md-3">
-        <div class="stat-tile-v5 stat-secondary">
-          <div class="stat-icon" style="background:rgba(37,99,235,.1);color:#2563eb;"><i class="bi bi-hourglass-split"></i></div>
-          <span class="stat-num" data-tile="claims_pending"><?= number_format($_initialStats['claims_pending']) ?></span>
-          <span class="stat-label">Pending review</span>
-          <span class="stat-delta" data-tile-delta="claims_pending"></span>
-        </div>
-      </div>
-      <div class="col-6 col-md-3">
-        <div class="stat-tile-v5 stat-danger">
-          <div class="stat-icon" style="background:rgba(220,38,38,.1);color:#dc2626;"><i class="bi bi-x-octagon-fill"></i></div>
-          <span class="stat-num" data-tile="claims_rejected"><?= number_format($_initialStats['claims_rejected']) ?></span>
-          <span class="stat-label">Rejected</span>
-          <span class="stat-delta" data-tile-delta="claims_rejected"></span>
+    </div>
+  </div>
+</section>
+
+
+<!-- ===== BENGALI USE-CASE CARD ===== -->
+<section class="py-5 bg-body-secondary" id="use-cases">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card border-0 shadow-sm p-4">
+          <h3 class="mb-4 text-center" style="font-family:'Noto Sans Bengali',sans-serif;font-weight:700;">কোন উদ্দেশ্যে আপনি একটি ডোমেইন পেতে পারেন?</h3>
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-mortarboard-fill fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">স্কুল</span>
+                <small class="d-block text-muted">School</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-building fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">কলেজ</span>
+                <small class="d-block text-muted">College</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-book-fill fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">মাদ্রাসা</span>
+                <small class="d-block text-muted">Madrasa</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-bank2 fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">বিশ্ববিদ্যালয়</span>
+                <small class="d-block text-muted">University</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-pencil-square fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">কোচিং সেন্টার</span>
+                <small class="d-block text-muted">Coaching Center</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-gear-fill fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">পলিটেকনিক</span>
+                <small class="d-block text-muted">Polytechnic</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-person-workspace fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">প্রশিক্ষণ কেন্দ্র</span>
+                <small class="d-block text-muted">Training Center</small>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-center p-3 rounded-3 bg-body-tertiary">
+                <i class="bi bi-heart-fill fs-4 text-primary d-block mb-1"></i>
+                <span style="font-family:'Noto Sans Bengali',sans-serif;font-weight:600;">এনজিও</span>
+                <small class="d-block text-muted">NGO</small>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -214,61 +267,6 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
           <p class="text-muted">Built for K-12 schools, kindergartens, madrasas and coaching centres &mdash; a clean, parent-friendly subdomain.</p>
           <span class="text-primary fw-semibold">Claim a .smartschool.bd subdomain <i class="bi bi-arrow-right"></i></span>
         </a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== FEATURES ===== -->
-<section id="features" class="py-5">
-  <div class="container">
-    <div class="text-center mb-5">
-      <span class="badge bg-primary-subtle text-primary fw-semibold mb-2">What you get</span>
-      <h2>Everything an institution needs &mdash; for free</h2>
-      <p class="text-muted">Designed for Bangladeshi schools, colleges, madrasas, polytechnics and NGOs.</p>
-    </div>
-    <div class="row g-4">
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card-v5 h-100">
-          <div class="feature-icon"><i class="bi bi-shield-lock-fill fs-5"></i></div>
-          <h5>Free SSL certificate</h5>
-          <p class="text-muted mb-0">Cloudflare-issued TLS certificates on every subdomain. HTTPS by default.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card-v5 h-100">
-          <div class="feature-icon"><i class="bi bi-lightning-charge-fill fs-5"></i></div>
-          <h5>Auto DNS via Cloudflare</h5>
-          <p class="text-muted mb-0">Approved claims get a Cloudflare-proxied A record automatically.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card-v5 h-100">
-          <div class="feature-icon"><i class="bi bi-translate fs-5"></i></div>
-          <h5>Bengali + English ready</h5>
-          <p class="text-muted mb-0">Every institution page renders both languages, indexed cleanly by Google.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card-v5 h-100">
-          <div class="feature-icon"><i class="bi bi-patch-check-fill fs-5"></i></div>
-          <h5>Verified directory</h5>
-          <p class="text-muted mb-0">Admin moderation + EIIN check keeps the directory clean and trustworthy.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card-v5 h-100">
-          <div class="feature-icon"><i class="bi bi-hdd-stack-fill fs-5"></i></div>
-          <h5>Full DNS control</h5>
-          <p class="text-muted mb-0">A, AAAA, CNAME, TXT, MX and NS records &mdash; manage from your dashboard.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-4">
-        <div class="feature-card-v5 h-100">
-          <div class="feature-icon" style="background:rgba(37,211,102,.12);color:#25D366;"><i class="bi bi-whatsapp fs-5"></i></div>
-          <h5>WhatsApp support</h5>
-          <p class="text-muted mb-0">Get help in Bengali or English, in real time via WhatsApp.</p>
-        </div>
       </div>
     </div>
   </div>
@@ -321,8 +319,9 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
   <div class="container">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
       <div>
-        <span class="badge bg-primary-subtle text-primary fw-semibold mb-1">Featured</span>
-        <h2 class="mb-0">Recently verified institutions</h2>
+        <span class="badge bg-primary-subtle text-primary fw-semibold mb-1">Realtime</span>
+        <h2 class="mb-0" style="font-family:'Noto Sans Bengali',sans-serif;">সাম্প্রতিক নিবন্ধিত ডোমেইন</h2>
+        <p class="text-muted mb-0 small">Recent Registered Domains</p>
       </div>
       <a href="/directory.php" class="btn btn-outline-primary btn-sm">View full directory <i class="bi bi-arrow-right"></i></a>
     </div>

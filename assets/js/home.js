@@ -19,8 +19,6 @@
       const next = {
         users: Number(t.users_registered ?? t.users ?? 0),
         claims_total: Number(t.claims_total ?? 0),
-        claims_pending: Number(t.claims_pending ?? 0),
-        claims_rejected: Number(t.claims_rejected ?? 0),
       };
       Object.keys(next).forEach(key => {
         animateTile(key, next[key], _prevStats[key === 'users' ? 'users_registered' : key]);
@@ -271,14 +269,18 @@
     if (!host) return;
     try {
       let r;
-      try { r = await App.api('/institutions?status=verified&limit=6'); }
-      catch { r = await App.api('/directory?status=verified&limit=6&sort=recent'); }
+      try { r = await App.api('/institutions?limit=6&sort=recent'); }
+      catch { r = await App.api('/directory?limit=6&sort=recent'); }
       const items = r.items || [];
       if (!items.length) {
-        host.innerHTML = '<div class="col-12"><p class="text-muted text-center">No verified institutions yet — be the first to claim!</p></div>';
+        host.innerHTML = '<div class="col-12"><p class="text-muted text-center">No registered domains yet — be the first to claim!</p></div>';
         return;
       }
-      host.innerHTML = items.map(i => `
+      host.innerHTML = items.map(i => {
+        const status = (i.status || 'pending').toLowerCase();
+        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+        const statusClass = status === 'verified' ? 'badge-verified' : (status === 'pending' || status === 'needs_info' ? 'badge-warning' : 'badge-muted');
+        return `
         <div class="col-md-6 col-lg-4">
           <a class="dir-card-v5 d-flex gap-3 text-decoration-none" href="${i.subdomain ? `/institution.php?brand=${encodeURIComponent(i.brand)}&slug=${encodeURIComponent(i.slug)}` : '#'}">
             <span class="dir-logo">${App.escapeHtml(App.initialsOf(i.name_en || i.slug))}</span>
@@ -287,13 +289,14 @@
               ${i.name_bn ? `<div class="text-muted small text-truncate">${App.escapeHtml(i.name_bn)}</div>` : ''}
               <div class="text-muted" style="font-size:.72rem;">${App.escapeHtml(i.subdomain || (i.slug + '.' + i.brand))}</div>
               <div class="mt-1 d-flex flex-wrap gap-1">
-                <span class="badge rounded-pill badge-verified">Verified</span>
+                <span class="badge rounded-pill ${statusClass}">${App.escapeHtml(statusLabel)}</span>
                 <span class="badge rounded-pill badge-brand">${App.escapeHtml(i.brand)}</span>
                 ${i.category ? `<span class="badge rounded-pill badge-muted">${App.escapeHtml(i.category)}</span>` : ''}
               </div>
             </div>
           </a>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     } catch {
       host.innerHTML = '<div class="col-12"><p class="text-muted small text-center">Could not load directory preview.</p></div>';
     }
