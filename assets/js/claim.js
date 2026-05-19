@@ -162,15 +162,8 @@
       _userProfile = r.user;
       App.setSession(null, r.user);
 
-      if (!r.user.profile_complete) {
-        // Profile incomplete — show details form (step 2) for them to fill
-        prefillDetailsForm(r.user);
-        showStep(2);
-      } else {
-        // Profile complete — go straight to privacy agreement
-        prefillDetailsForm(r.user);
-        showPrivacyDialog();
-      }
+      // 3. Show institution ensurity dialog before proceeding
+      showInstitutionEnsurityDialog(r.user);
     } catch (e) {
       if (e?.status === 401) {
         App.clearSession();
@@ -179,6 +172,106 @@
         App.toast(e?.detail || 'Could not verify your profile', 'error');
       }
     }
+  }
+
+  // ─── Institution Ensurity / Confirmation Dialog ────────────────────────────
+
+  function showInstitutionEnsurityDialog(user) {
+    let modal = document.getElementById('institutionEnsurityModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'institutionEnsurityModal';
+      modal.className = 'modal fade';
+      modal.tabIndex = -1;
+      modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-building-check text-primary fs-4"></i>
+                <h5 class="modal-title mb-0">Confirm Your Institution</h5>
+              </div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="alert alert-light border mb-3">
+                <div class="d-flex align-items-start gap-2">
+                  <i class="bi bi-globe2 text-primary mt-1"></i>
+                  <div>
+                    <strong data-ensurity-domain></strong>
+                  </div>
+                </div>
+              </div>
+              <p class="small fw-semibold mb-2">Before proceeding, please confirm:</p>
+              <ul class="list-unstyled small text-muted mb-3">
+                <li class="mb-2 d-flex align-items-start gap-2">
+                  <i class="bi bi-check-circle text-success mt-1"></i>
+                  <span>I am a staff member or authorized representative of this institution</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start gap-2">
+                  <i class="bi bi-check-circle text-success mt-1"></i>
+                  <span>I have the authority to register a domain on behalf of this institution</span>
+                </li>
+              </ul>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="ensurityConfirmCheck" data-ensurity-check>
+                <label class="form-check-label small fw-semibold" for="ensurityConfirmCheck">
+                  I confirm the above statements are true
+                </label>
+              </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary btn-sm" data-ensurity-confirm disabled>
+                <i class="bi bi-arrow-right me-1"></i> Confirm & Proceed
+              </button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+
+      // Wire checkbox to enable/disable confirm button
+      const checkbox = modal.querySelector('[data-ensurity-check]');
+      const confirmBtn = modal.querySelector('[data-ensurity-confirm]');
+      checkbox.addEventListener('change', () => {
+        confirmBtn.disabled = !checkbox.checked;
+      });
+    }
+
+    // Fill in the domain info
+    modal.querySelector('[data-ensurity-domain]').textContent = `${_selectedSlug}.${_selectedBrand}`;
+
+    // Reset state
+    const checkbox = modal.querySelector('[data-ensurity-check]');
+    const confirmBtn = modal.querySelector('[data-ensurity-confirm]');
+    checkbox.checked = false;
+    confirmBtn.disabled = true;
+
+    // Remove previous confirm listener and attach a fresh one
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', () => {
+      const bsModal = bootstrap.Modal.getInstance(modal);
+      if (bsModal) bsModal.hide();
+
+      // Proceed with existing flow
+      if (!user.profile_complete) {
+        prefillDetailsForm(user);
+        showStep(2);
+      } else {
+        prefillDetailsForm(user);
+        showPrivacyDialog();
+      }
+    });
+
+    // Re-wire checkbox to the new button
+    checkbox.addEventListener('change', () => {
+      newConfirmBtn.disabled = !checkbox.checked;
+    });
+
+    // Show the modal
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
   }
 
   // ─── Step 2: Institution Details ───────────────────────────────────────────
