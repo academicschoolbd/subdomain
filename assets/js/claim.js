@@ -266,8 +266,13 @@
 
       // Proceed with existing flow
       if (!user.profile_complete) {
-        prefillDetailsForm(user);
-        showStep(2);
+        // v5pro — instead of dropping the user onto step 2 (the institution
+        // form) for an incomplete profile, send them to the dedicated
+        // /profile-complete.php gate via the Bangla floating modal. The
+        // returnUrl preserves the slug+brand so the wizard resumes.
+        const returnUrl = '/claim.php?slug=' + encodeURIComponent(_selectedSlug)
+                        + '&brand=' + encodeURIComponent(_selectedBrand);
+        App.showProfileGateDialog({ next: returnUrl });
       } else {
         prefillDetailsForm(user);
         showPrivacyDialog();
@@ -466,11 +471,14 @@
       submitBtn.innerHTML = '<i class="bi bi-send me-1"></i> Submit Claim to Admin';
 
       if (e?.profile_incomplete) {
-        // Close modal, show details form
+        // Close modal, route to the dedicated profile-completion gate via
+        // the Bangla dialog (handles the rare race where profile becomes
+        // incomplete between the slug check and the final submit).
         const bsModal = bootstrap.Modal.getInstance(modal);
         if (bsModal) bsModal.hide();
-        App.toast('Please complete your profile first', 'error');
-        showStep(2);
+        const returnUrl = '/claim.php?slug=' + encodeURIComponent(_selectedSlug)
+                        + '&brand=' + encodeURIComponent(_selectedBrand);
+        App.showProfileGateDialog({ next: returnUrl });
       } else if (e?.errors && typeof e.errors === 'object' && Object.keys(e.errors).length > 0) {
         // Field-level errors: close modal, show step 2 with highlighted fields
         const bsModal = bootstrap.Modal.getInstance(modal);

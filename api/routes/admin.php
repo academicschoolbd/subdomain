@@ -342,15 +342,18 @@ function route_admin_export_users_csv(array $CONFIG): void
     $stmt = db($CONFIG)->query(
         'SELECT id, email, name, mobile, phone, provider, is_admin,
                 designation_bn, institution_name, division, district, upazila,
-                profile_completed_at, created_at
+                profile_completed_at, created_at, date_of_birth
            FROM users
        ORDER BY id ASC'
     );
     $rows = $stmt->fetchAll();
+    // v5pro: `date_of_birth` is appended at the end so existing column
+    // indices for downstream consumers (shell pipelines that read by
+    // position) do not shift when the new gate column ships.
     $headers = [
         'id','email','name','mobile','phone','provider','is_admin',
         'designation_bn','institution_name','division','district','upazila',
-        'profile_completed_at','created_at',
+        'profile_completed_at','created_at','date_of_birth',
     ];
     $gen = (function () use ($rows) {
         foreach ($rows as $r) {
@@ -358,7 +361,8 @@ function route_admin_export_users_csv(array $CONFIG): void
                 $r['id'], $r['email'], $r['name'], $r['mobile'], $r['phone'],
                 $r['provider'], $r['is_admin'],
                 $r['designation_bn'], $r['institution_name'], $r['division'],
-                $r['district'], $r['upazila'], $r['profile_completed_at'], $r['created_at'],
+                $r['district'], $r['upazila'],
+                $r['profile_completed_at'], $r['created_at'], $r['date_of_birth'],
             ];
         }
     })();

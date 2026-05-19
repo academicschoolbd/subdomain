@@ -415,6 +415,76 @@ function requireAuth(opts) {
   return Promise.reject({ detail: 'Sign-in required' });
 }
 
+// ─── Profile-Complete Gate Dialog (Bangla) ────────────────────────────────────
+
+let _profileGateModal = null;
+let _profileGateInstance = null;
+
+function showProfileGateDialog(opts = {}) {
+  // Mirror auth-callback.js's safeNext: only allow same-origin relative paths
+  // (start with '/' but not '//'). Untrusted callers cannot smuggle an open
+  // redirect through the dialog even if the destination page's safeNext()
+  // were ever bypassed.
+  const _rawNext = (opts && typeof opts.next === 'string' && opts.next)
+    ? opts.next
+    : (location.pathname + location.search);
+  const next = (_rawNext.startsWith('/') && !_rawNext.startsWith('//'))
+    ? _rawNext
+    : '/dashboard.php';
+
+  if (!_profileGateModal) {
+    const div = document.createElement('div');
+    div.className = 'modal fade';
+    div.id = 'profileGateModal';
+    div.tabIndex = -1;
+    div.setAttribute('aria-labelledby', 'profileGateModalTitle');
+    div.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header border-0 pb-0">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-person-exclamation text-primary fs-4"></i>
+              <h5 class="modal-title mb-0" id="profileGateModalTitle"
+                  lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;"
+                  data-gate-title>প্রোফাইল সম্পূর্ণ করুন</h5>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" lang="bn"
+               style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif; line-height: 1.7;">
+            <p class="mb-0" data-gate-body>ডোমেইন অর্ডার বা ক্লেইম করতে হলে আপনার পূর্ণ নাম, মোবাইল নম্বর এবং জন্ম তারিখ দিয়ে প্রোফাইল সম্পূর্ণ করুন। এটি একবারই করতে হবে।</p>
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"
+                    lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">বাতিল</button>
+            <button type="button" class="btn btn-primary" data-gate-go
+                    lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">
+              <i class="bi bi-person-check me-1"></i> প্রোফাইল সম্পূর্ণ করুন
+            </button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    _profileGateModal = div;
+    _profileGateInstance = new bootstrap.Modal(div);
+  }
+
+  // Re-wire the primary button each call so the latest `next` is used.
+  const goBtn = _profileGateModal.querySelector('[data-gate-go]');
+  const fresh = goBtn.cloneNode(true);
+  goBtn.parentNode.replaceChild(fresh, goBtn);
+  fresh.addEventListener('click', () => {
+    // Mark the prompt as "acknowledged" only when the user actually picks the
+    // primary CTA. If they dismiss the modal (Cancel/Esc/backdrop) the flag
+    // stays unset and boot() will re-prompt on the next navigation.
+    try { sessionStorage.setItem('profile_redirect_done', '1'); } catch (_) {}
+    location.href = '/profile-complete.php?next=' + encodeURIComponent(next);
+  });
+
+  _profileGateInstance.show();
+  return _profileGateInstance;
+}
+
 // ─── Toast Notifications ─────────────────────────────────────────────────────
 
 function toast(message, type = 'info') {
@@ -544,13 +614,20 @@ function boot() {
     }
   }).catch(() => {});
 
-  // Profile completeness check — redirect if incomplete
-  if (isAuthed() && location.pathname !== '/profile.php' && !sessionStorage.getItem('profile_redirect_done')) {
+  // Profile completeness check — show the Bangla gate dialog if incomplete.
+  // Skipped on /profile-complete.php (the gate page itself), /profile.php (the
+  // legacy 7-field editor) and /auth/callback.php (OAuth flow), so we don't
+  // bounce users who are explicitly editing or finishing sign-in.
+  // The `profile_redirect_done` flag is set by the dialog's primary CTA so a
+  // user who dismisses without acting is re-prompted on the next navigation.
+  const _gateSkipPaths = ['/profile-complete.php', '/profile.php', '/auth/callback.php'];
+  if (isAuthed()
+      && !_gateSkipPaths.includes(location.pathname)
+      && !sessionStorage.getItem('profile_redirect_done')) {
     api('/auth/me').then(r => {
       if (r?.user && r.user.profile_complete === false) {
-        sessionStorage.setItem('profile_redirect_done', '1');
-        toast('Please complete your profile', 'error');
-        setTimeout(() => { location.href = '/profile.php'; }, 1500);
+        const next = location.pathname + location.search;
+        showProfileGateDialog({ next });
       }
     }).catch(() => {});
   }
@@ -579,6 +656,7 @@ window.App = Object.freeze({
   openAuthModal,
   closeAuthModal,
   requireAuth,
+  showProfileGateDialog,
   toast,
   escapeHtml,
   debounce,

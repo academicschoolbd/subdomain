@@ -50,6 +50,7 @@ $pretty = [
     '/privacy'       => '/privacy.php',
     '/terms'         => '/terms.php',
     '/reset-password'=> '/reset-password.php',
+    '/profile-complete'=> '/profile-complete.php',
     '/sitemap.xml'   => '/sitemap.xml.php',
     '/robots.txt'    => '/robots.txt',
 ];

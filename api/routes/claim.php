@@ -57,11 +57,15 @@ function route_claim_submit(array $CONFIG): void
 
     // Gate: profile must be complete before submitting a claim.
     if (empty($u['profile_complete'])) {
+        // v5pro — `detail_bn` is the Bangla copy paired with the English
+        // `detail` (kept for backward compatibility). Newer clients prefer
+        // detail_bn so the in-app dialog can show native-language guidance.
         send_json([
             'ok' => false,
             'profile_incomplete' => true,
             'missing' => $u['profile_missing'] ?? profile_missing_fields($u),
-            'detail' => 'Please complete your profile (full name, mobile, designation, institution and location) before claiming a subdomain.',
+            'detail' => 'Please complete your profile (full name, mobile, and date of birth) before claiming a subdomain.',
+            'detail_bn' => 'ডোমেইন ক্লেইম করার আগে আপনার প্রোফাইল সম্পূর্ণ করুন (পূর্ণ নাম, মোবাইল ও জন্ম তারিখ)।',
         ], 422);
     }
 
