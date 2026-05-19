@@ -86,31 +86,84 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
     <!-- Step 2: Institution Details -->
     <div class="card border-0 shadow-sm mt-3" data-step="2" hidden>
       <div class="card-body p-4">
-        <h5 class="mb-3"><i class="bi bi-building me-2 text-primary"></i>Institution details</h5>
+        <h5 class="mb-3"><i class="bi bi-building me-2 text-primary"></i>Institution details <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;" class="text-muted small fw-normal">(প্রতিষ্ঠানের তথ্য)</span></h5>
         <form data-claim-details-form>
           <div class="row g-3">
-            <div class="col-md-6"><label class="form-label small fw-semibold">Institution name (English)</label><input class="form-control" name="name_en" required><div class="invalid-feedback"></div></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">প্রতিষ্ঠানের নাম (বাংলা)</label><input class="form-control" name="name_bn"><div class="invalid-feedback"></div></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Category</label>
-              <select class="form-select" name="category">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Institution name in English <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(প্রতিষ্ঠানের নাম ইংরেজিতে)</span></label>
+              <input class="form-control" name="name_en" required>
+              <div class="form-text"><span>Full official name as you want it displayed</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">পূর্ণ অফিসিয়াল নাম</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold"><span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">প্রতিষ্ঠানের নাম বাংলায়</span> (Institution name in Bangla)</label>
+              <input class="form-control" name="name_bn" lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">
+              <div class="form-text"><span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">বাংলায় প্রতিষ্ঠানের পূর্ণ নাম</span> &mdash; <span>optional</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Category <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(ক্যাটেগরি)</span></label>
+              <select class="form-select" name="category" required>
                 <option value="">— Select —</option>
                 <option>School</option><option>College</option><option>University</option>
                 <option>Madrasa</option><option>Polytechnic</option><option>Training Institute</option>
                 <option>NGO</option><option>Other</option>
               </select>
+              <div class="form-text"><span>Pick the closest match</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">সবচেয়ে কাছাকাছি অপশন বেছে নিন</span></div>
               <div class="invalid-feedback"></div>
             </div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">EIIN <span class="text-muted">(optional)</span></label><input class="form-control" name="eiin"><div class="invalid-feedback"></div></div>
-            <div class="col-md-4"><label class="form-label small fw-semibold">Division</label><select class="form-select" name="division" data-bd-division><option value="">—</option></select><div class="invalid-feedback"></div></div>
-            <div class="col-md-4"><label class="form-label small fw-semibold">District</label><select class="form-select" name="district" data-bd-district><option value="">—</option></select><div class="invalid-feedback"></div></div>
-            <div class="col-md-4"><label class="form-label small fw-semibold">Upazila</label><select class="form-select" name="upazila" data-bd-upazila><option value="">—</option></select><div class="invalid-feedback"></div></div>
-            <div class="col-12"><label class="form-label small fw-semibold">Address</label><input class="form-control" name="address"><div class="invalid-feedback"></div></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Contact name</label><input class="form-control" name="contact_name"><div class="invalid-feedback"></div></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Contact phone</label><input class="form-control" name="contact_phone"><div class="invalid-feedback"></div></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Contact email</label><input class="form-control" name="contact_email" type="email"><div class="invalid-feedback"></div></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Website <span class="text-muted">(optional)</span></label><input class="form-control" name="website"><div class="invalid-feedback"></div></div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">EIIN <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(EIIN নম্বর)</span> <span class="text-muted">(optional)</span></label>
+              <input class="form-control" name="eiin">
+              <div class="form-text"><span>Education Board EIIN if you have one</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">ঐচ্ছিক</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Division <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(বিভাগ)</span></label>
+              <select class="form-select" name="division" data-bd-division><option value="">—</option></select>
+              <div class="form-text"><span>Select your division</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">বিভাগ নির্বাচন করুন</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">District <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(জেলা)</span></label>
+              <select class="form-select" name="district" data-bd-district><option value="">—</option></select>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Upazila / Thana <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(উপজেলা / থানা)</span></label>
+              <select class="form-select" name="upazila" data-bd-upazila><option value="">—</option></select>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Address <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(ঠিকানা)</span></label>
+              <input class="form-control" name="address">
+              <div class="form-text"><span>Street, area, post office</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">রোড, এলাকা, ডাকঘর</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Contact person name <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(যোগাযোগের ব্যক্তির নাম)</span></label>
+              <input class="form-control" name="contact_name">
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Contact phone <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(যোগাযোগের নম্বর)</span></label>
+              <input class="form-control" name="contact_phone">
+              <div class="form-text"><span>Bangladesh mobile, e.g. 01712345678</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">বাংলাদেশী মোবাইল</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Contact email <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(যোগাযোগের ইমেইল)</span></label>
+              <input class="form-control" name="contact_email" type="email">
+              <div class="invalid-feedback"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Website <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(ওয়েবসাইট)</span> <span class="text-muted">(optional)</span></label>
+              <input class="form-control" name="website">
+              <div class="form-text"><span>Optional &mdash; must start with http:// or https://</span> &mdash; <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">ঐচ্ছিক</span></div>
+              <div class="invalid-feedback"></div>
+            </div>
             <div class="col-12 text-end">
-              <button class="btn btn-primary" type="submit"><i class="bi bi-shield-check me-1"></i> Review & Submit</button>
+              <button class="btn btn-primary" type="submit"><i class="bi bi-shield-check me-1"></i> Review &amp; Submit</button>
             </div>
           </div>
         </form>

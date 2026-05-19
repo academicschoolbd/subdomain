@@ -9,6 +9,18 @@ const ALLOWED_IMG_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
 const MAX_IMG_BYTES = 4 * 1024 * 1024;
 
+/**
+ * v5pro — single source of truth for the institution-category enum. Kept in
+ * sync with the `<select name="category">` options rendered by claim.php and
+ * the institution form on the dashboard. The submit handler validates against
+ * this list and the structured 422 `institution_incomplete` response below
+ * cites it back to the client when the value is missing or unknown.
+ */
+const ALLOWED_CLAIM_CATEGORIES = [
+    'School', 'College', 'University', 'Madrasa',
+    'Polytechnic', 'Training Institute', 'NGO', 'Other',
+];
+
 function _ensure_owner(array $CONFIG, int $instId, int $userId, bool $isAdmin): array
 {
     $stmt = db($CONFIG)->prepare('SELECT * FROM institutions WHERE id = ?');
@@ -100,18 +112,74 @@ function route_claim_submit(array $CONFIG): void
     $slug = normalize_slug($rawSlug);
     [$ok, $err] = slug_validity($CONFIG, $slug);
     if (!$ok) send_error($err, 400);
-    $name_en = trim((string)require_param($data, 'name_en'));
-    $category = trim((string)require_param($data, 'category'));
-    $name_bn = trim((string)($data['name_bn'] ?? ''));
+
+    // v5pro — Institution-info gate. Replace the legacy raw 400 ("Missing
+    // required field: category") with a structured 422 that mirrors the
+    // FEAT-002 profile-incomplete response: an English `detail` paired with
+    // a Bangla `detail_bn`, plus a `missing` array for empty required fields
+    // and an `errors` map for malformed-but-present optional fields. The
+    // client uses the `institution_incomplete` flag to redirect the wizard
+    // back to step 2 with per-field highlighting and a Bangla toast — no
+    // round-trip through the privacy modal. Hard-required fields are only
+    // `name_en` and `category`; the rest are soft-validated when supplied.
+    $name_en       = trim((string)($data['name_en']       ?? ''));
+    $category      = trim((string)($data['category']      ?? ''));
+    $name_bn       = trim((string)($data['name_bn']       ?? ''));
+    $contact_email = trim((string)($data['contact_email'] ?? ''));
+    $contact_phone = trim((string)($data['contact_phone'] ?? ''));
+    $website       = trim((string)($data['website']       ?? ''));
+
+    $missing = [];
+    $errors = [];
+
+    if ($name_en === '') {
+        $missing[] = 'name_en';
+        $errors['name_en'] = 'Institution name (English) is required.';
+    }
+    if ($category === '') {
+        $missing[] = 'category';
+        $errors['category'] = 'Please select a category.';
+    } elseif (!in_array($category, ALLOWED_CLAIM_CATEGORIES, true)) {
+        // Present but not in the allowed enum — treat as malformed, not missing.
+        $errors['category'] = 'Please select a category.';
+    }
+
+    // Soft validation: only when the optional field is non-empty. These
+    // populate `errors` but NOT `missing`, so the client can distinguish
+    // "the user left it blank" from "the user typed something invalid".
+    if ($contact_email !== '' && !filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
+        $errors['contact_email'] = 'That email looks invalid.';
+    }
+    if ($contact_phone !== '' && !is_valid_bd_phone($contact_phone)) {
+        $errors['contact_phone'] = 'Enter a valid Bangladesh mobile (e.g. 01712345678).';
+    }
+    if ($website !== '' && !preg_match('#^https?://#i', $website)) {
+        $errors['website'] = 'Website must start with http:// or https://.';
+    }
+
+    if ($missing || $errors) {
+        send_json([
+            'ok' => false,
+            'institution_incomplete' => true,
+            'step' => 'institution',
+            'missing' => $missing,
+            'errors' => $errors,
+            'detail' => 'Please complete the institution information before submitting your claim.',
+            'detail_bn' => 'ক্লেইম সাবমিট করার আগে প্রতিষ্ঠানের তথ্য সম্পূর্ণ করুন (নাম, ক্যাটেগরি ইত্যাদি)।',
+        ], 422);
+    }
+
+    $name_bn = $name_bn !== '' ? $name_bn : '';
     $division = $data['division'] ?? null;
     $district = $data['district'] ?? null;
     $upazila = $data['upazila'] ?? null;
     $address = $data['address'] ?? null;
     $eiin = $data['eiin'] ?? null;
     $contact_name = $data['contact_name'] ?? null;
-    $contact_phone = $data['contact_phone'] ?? null;
-    $contact_email = $data['contact_email'] ?? null;
-    $website = $data['website'] ?? null;
+    // Keep the previously-typed values; they passed soft-validation above.
+    $contact_phone = $contact_phone !== '' ? $contact_phone : null;
+    $contact_email = $contact_email !== '' ? $contact_email : null;
+    $website = $website !== '' ? $website : null;
     $about_en = $data['about_en'] ?? null;
     $about_bn = $data['about_bn'] ?? null;
 

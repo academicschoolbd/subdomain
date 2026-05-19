@@ -275,6 +275,10 @@
         App.showProfileGateDialog({ next: returnUrl });
       } else {
         prefillDetailsForm(user);
+        // v5pro — defence-in-depth pre-flight: if the prefilled values still
+        // leave name_en or category empty, do NOT open the privacy modal.
+        // Reveal step 2 with highlighting and a Bangla toast instead.
+        if (!institutionPreflightOk()) return;
         showPrivacyDialog();
       }
     });
@@ -316,6 +320,10 @@
     detailsForm.addEventListener('submit', e => {
       e.preventDefault();
       if (!App.isAuthed()) { App.openAuthModal({ mode: 'signup' }); return; }
+      // v5pro — same pre-flight as the ensurity-confirm flow. If name_en or
+      // category is empty, stay on step 2 and surface the Bangla toast
+      // rather than opening the privacy modal on an incomplete form.
+      if (!institutionPreflightOk()) return;
       // Show privacy agreement before final submission
       showPrivacyDialog();
     });
@@ -421,8 +429,13 @@
       const el = detailsForm.querySelector(`[name="${fieldName}"]`);
       if (!el) continue;
       el.classList.add('is-invalid');
-      let feedback = el.nextElementSibling;
-      if (!feedback || !feedback.classList.contains('invalid-feedback')) {
+      // Prefer a sibling .invalid-feedback already in the DOM. The bilingual
+      // form lays out [input] [.form-text] [.invalid-feedback], so we look
+      // through the parent's children rather than relying on nextElementSibling.
+      let feedback = el.parentNode
+        ? el.parentNode.querySelector(':scope > .invalid-feedback')
+        : null;
+      if (!feedback) {
         feedback = document.createElement('div');
         feedback.className = 'invalid-feedback';
         el.parentNode.insertBefore(feedback, el.nextSibling);
@@ -432,6 +445,65 @@
       displayed++;
     }
     return displayed > 0;
+  }
+
+  // v5pro — focus the first field that the server flagged as missing or
+  // malformed, so the user lands directly on the input that needs attention.
+  // Falls back to the first `.is-invalid` input if no list is provided.
+  function focusFirstInvalidField(form, missing, errors) {
+    if (!form) return;
+    const candidates = [];
+    if (Array.isArray(missing)) candidates.push(...missing);
+    if (errors && typeof errors === 'object') {
+      for (const k of Object.keys(errors)) {
+        if (!candidates.includes(k)) candidates.push(k);
+      }
+    }
+    for (const name of candidates) {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el) {
+        try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+        return;
+      }
+    }
+    const firstInvalid = form.querySelector('.is-invalid');
+    if (firstInvalid) {
+      try { firstInvalid.focus({ preventScroll: true }); } catch { firstInvalid.focus(); }
+      try { firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+    }
+  }
+
+  // v5pro — defence-in-depth client gate. Returns true when the bare-minimum
+  // required institution fields (name_en + category) are filled. Used by the
+  // ensurity-confirm flow and the detailsForm submit listener so the user
+  // cannot reach the privacy modal with an empty institution form.
+  function institutionPreflightOk() {
+    if (!detailsForm) return true;
+    const fd = new FormData(detailsForm);
+    const nameEn = (fd.get('name_en') || '').toString().trim();
+    const category = (fd.get('category') || '').toString().trim();
+    const missing = [];
+    const errors = {};
+    if (!nameEn) {
+      missing.push('name_en');
+      errors.name_en = 'Institution name (English) is required.';
+    }
+    if (!category) {
+      missing.push('category');
+      errors.category = 'Please select a category.';
+    }
+    if (missing.length === 0) return true;
+    clearValidationState();
+    showStep(2);
+    showFieldErrors(errors);
+    const stepEl = document.querySelector('[data-step="2"]');
+    if (stepEl) {
+      try { stepEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
+    }
+    focusFirstInvalidField(detailsForm, missing, errors);
+    App.toast('প্রতিষ্ঠানের তথ্য সম্পূর্ণ করুন (নাম ও ক্যাটেগরি)', 'info');
+    return false;
   }
 
   async function submitClaim(modal) {
@@ -479,6 +551,22 @@
         const returnUrl = '/claim.php?slug=' + encodeURIComponent(_selectedSlug)
                         + '&brand=' + encodeURIComponent(_selectedBrand);
         App.showProfileGateDialog({ next: returnUrl });
+      } else if (e?.institution_incomplete || (e?.status === 422 && e?.step === 'institution')) {
+        // v5pro — server says the institution form is missing required pieces.
+        // Close the privacy modal, reveal step 2, paint per-field highlighting,
+        // focus the first offender, and surface a Bangla toast. This branch is
+        // dedicated and runs BEFORE the generic `e.errors` fallback so the
+        // toast/copy stays Bangla-first.
+        const bsModal = bootstrap.Modal.getInstance(modal);
+        if (bsModal) bsModal.hide();
+        showStep(2);
+        showFieldErrors(e.errors || {});
+        const stepEl = document.querySelector('[data-step="2"]');
+        if (stepEl) {
+          try { stepEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
+        }
+        focusFirstInvalidField(detailsForm, e.missing || [], e.errors || {});
+        App.toast(e.detail_bn || e.detail || 'প্রতিষ্ঠানের তথ্য সম্পূর্ণ করুন', 'error');
       } else if (e?.errors && typeof e.errors === 'object' && Object.keys(e.errors).length > 0) {
         // Field-level errors: close modal, show step 2 with highlighted fields
         const bsModal = bootstrap.Modal.getInstance(modal);
