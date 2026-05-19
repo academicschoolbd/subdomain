@@ -543,6 +543,16 @@ function boot() {
       document.querySelectorAll('[data-wa-sub]').forEach(el => { el.textContent = wa.community_subtitle; });
     }
   }).catch(() => {});
+
+  // Profile completeness check — redirect if incomplete
+  if (isAuthed() && location.pathname !== '/profile.php') {
+    api('/auth/me').then(r => {
+      if (r?.user && r.user.profile_complete === false) {
+        toast('Please complete your profile', 'error');
+        setTimeout(() => { location.href = '/profile.php'; }, 1500);
+      }
+    }).catch(() => {});
+  }
 }
 
 // Run boot on DOMContentLoaded
