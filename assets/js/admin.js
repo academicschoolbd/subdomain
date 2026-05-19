@@ -485,34 +485,737 @@
     });
   }
 
-  // ─── Placeholder loaders for dynamic panes ─────────────────────────────────
+
+  // ─── Settings Pane ──────────────────────────────────────────────────────────
+
+  const THEME_SWATCHES = [
+    '#0f766e','#2563eb','#7c3aed','#db2777',
+    '#ea580c','#16a34a','#0891b2','#4f46e5'
+  ];
 
   function loadSettings() {
     const host = document.querySelector('[data-settings-host]');
     if (!host || host.dataset.loaded) return;
     host.dataset.loaded = '1';
-    host.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-body"><p class="text-muted">Platform settings panel loads dynamically from API...</p></div></div>';
+    host.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+
+    App.api('/admin/settings').then(r => {
+      const s = r.settings || {};
+      renderSettingsForm(host, s);
+    }).catch(e => {
+      host.innerHTML = `<div class="alert alert-danger">${App.escapeHtml(e?.detail || 'Failed to load settings')}</div>`;
+    });
   }
+
+  function renderSettingsForm(host, s) {
+    const swatchesHtml = THEME_SWATCHES.map(c =>
+      `<button type="button" class="btn p-0 border-2 rounded-circle me-2 mb-2" data-swatch="${c}"
+        style="width:32px;height:32px;background:${c};${s.theme_primary_hex === c ? 'border-color:var(--bs-body-color);box-shadow:0 0 0 2px var(--bs-body-color)' : 'border-color:transparent'}"></button>`
+    ).join('');
+
+    host.innerHTML = `
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-palette me-2"></i>Theme Color</h6>
+          <div class="mb-3">
+            <div class="d-flex flex-wrap align-items-center mb-2">${swatchesHtml}</div>
+            <div class="input-group" style="max-width:220px;">
+              <span class="input-group-text"><i class="bi bi-hash"></i></span>
+              <input type="text" class="form-control form-control-sm" data-theme-hex
+                value="${App.escapeHtml(s.theme_primary_hex || '')}" placeholder="0f766e" maxlength="7">
+              <span class="input-group-text p-0 overflow-hidden" style="width:38px;">
+                <input type="color" class="border-0 w-100 h-100" style="cursor:pointer;"
+                  data-theme-picker value="${s.theme_primary_hex || '#0f766e'}">
+              </span>
+            </div>
+            <small class="text-muted">Leave blank to use the default teal.</small>
+          </div>
+          <hr>
+
+          <h6 class="fw-semibold mb-3"><i class="bi bi-gear me-2"></i>Platform Toggles</h6>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_require_approval" ${s.require_approval ? 'checked' : ''}>
+                <label class="form-check-label" for="set_require_approval">Require admin approval</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_require_documents" ${s.require_documents ? 'checked' : ''}>
+                <label class="form-check-label" for="set_require_documents">Require documents</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_instant_claim" ${s.instant_claim ? 'checked' : ''}>
+                <label class="form-check-label" for="set_instant_claim">Instant claim (skip queue)</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_cloudflare_auto_dns" ${s.cloudflare_auto_dns ? 'checked' : ''}>
+                <label class="form-check-label" for="set_cloudflare_auto_dns">Cloudflare auto-DNS</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="set_email_registration" ${s.email_registration_enabled ? 'checked' : ''}>
+                <label class="form-check-label" for="set_email_registration">Email registration enabled</label>
+              </div>
+            </div>
+          </div>
+          <hr>
+
+          <h6 class="fw-semibold mb-3"><i class="bi bi-calendar3 me-2"></i>Domain Terms</h6>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Term length (days)</label>
+              <input type="number" class="form-control" id="set_term_days" min="1" value="${s.domain_term_days || 365}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Renewal price (BDT)</label>
+              <input type="number" class="form-control" id="set_renewal_price" min="0" value="${s.domain_renewal_price_bdt || 0}">
+            </div>
+          </div>
+          <button class="btn btn-primary" data-save-settings><i class="bi bi-check-lg me-1"></i>Save Settings</button>
+        </div>
+      </div>`;
+
+    // Wire swatches
+    host.querySelectorAll('[data-swatch]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hex = btn.getAttribute('data-swatch');
+        host.querySelector('[data-theme-hex]').value = hex;
+        host.querySelector('[data-theme-picker]').value = hex;
+        host.querySelectorAll('[data-swatch]').forEach(b => { b.style.borderColor = 'transparent'; b.style.boxShadow = 'none'; });
+        btn.style.borderColor = 'var(--bs-body-color)';
+        btn.style.boxShadow = '0 0 0 2px var(--bs-body-color)';
+      });
+    });
+
+    // Wire color picker
+    const picker = host.querySelector('[data-theme-picker]');
+    const hexInput = host.querySelector('[data-theme-hex]');
+    if (picker) picker.addEventListener('input', () => { hexInput.value = picker.value; });
+    if (hexInput) hexInput.addEventListener('input', () => {
+      let v = hexInput.value.trim().replace(/^#/, '');
+      if (/^[0-9a-f]{6}$/i.test(v)) picker.value = '#' + v;
+    });
+
+
+    // Wire save
+    host.querySelector('[data-save-settings]').addEventListener('click', async () => {
+      const btn = host.querySelector('[data-save-settings]');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+      let themeHex = (hexInput.value || '').trim().replace(/^#/, '');
+      if (themeHex && !/^[0-9a-f]{6}$/i.test(themeHex)) { App.toast('Invalid hex color', 'error'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Settings'; return; }
+      const body = {
+        require_approval: host.querySelector('#set_require_approval').checked,
+        require_documents: host.querySelector('#set_require_documents').checked,
+        instant_claim: host.querySelector('#set_instant_claim').checked,
+        cloudflare_auto_dns: host.querySelector('#set_cloudflare_auto_dns').checked,
+        email_registration_enabled: host.querySelector('#set_email_registration').checked,
+        domain_term_days: parseInt(host.querySelector('#set_term_days').value, 10) || 365,
+        domain_renewal_price_bdt: parseInt(host.querySelector('#set_renewal_price').value, 10) || 0,
+        theme_primary_hex: themeHex ? '#' + themeHex : '',
+      };
+      try {
+        const res = await App.api('/admin/settings', { method: 'POST', body });
+        App.toast('Settings saved', 'success');
+        if (body.theme_primary_hex && App.applyBrandTheme) App.applyBrandTheme(body.theme_primary_hex);
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Settings';
+      } catch (e) {
+        App.toast(e?.detail || 'Save failed', 'error');
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Settings';
+      }
+    });
+  }
+
+
+  // ─── Integrations Pane ─────────────────────────────────────────────────────
 
   function loadIntegrations() {
     const host = document.querySelector('[data-integrations-host]');
     if (!host || host.dataset.loaded) return;
     host.dataset.loaded = '1';
-    host.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-body"><p class="text-muted">Integrations panel (OAuth keys, Cloudflare config) loads from API...</p></div></div>';
+    host.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+
+    App.api('/admin/integrations').then(r => {
+      renderIntegrationsForm(host, r);
+    }).catch(e => {
+      host.innerHTML = `<div class="alert alert-danger">${App.escapeHtml(e?.detail || 'Failed to load integrations')}</div>`;
+    });
   }
+
+  function intVal(values, key) {
+    const v = values[key];
+    if (!v) return '';
+    return v.masked ? '' : (v.value || '');
+  }
+
+  function intIsSet(values, key) {
+    return !!(values[key]?.is_set);
+  }
+
+  function secretField(id, label, values, key, placeholder) {
+    const isSet = intIsSet(values, key);
+    const hint = isSet ? '<small class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</small>' : '';
+    return `<div class="mb-3">
+      <label class="form-label small fw-semibold">${label} ${hint}</label>
+      <input type="password" class="form-control form-control-sm" id="${id}"
+        placeholder="${isSet ? '••••••••••••••••' : placeholder}" autocomplete="new-password">
+    </div>`;
+  }
+
+
+  function renderIntegrationsForm(host, data) {
+    const v = data.values || {};
+    const redirects = data.redirects || {};
+
+    host.innerHTML = `
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-globe me-2"></i>Site & Branding</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Site URL</label>
+              <input type="url" class="form-control form-control-sm" id="int_site_url" value="${App.escapeHtml(intVal(v, 'site.url'))}" placeholder="https://institution.bd">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Brand Name</label>
+              <input type="text" class="form-control form-control-sm" id="int_brand_name" value="${App.escapeHtml(intVal(v, 'brand.name'))}" placeholder="institution.bd">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-shield-lock me-2"></i>OAuth Providers</h6>
+          <div class="row g-3">
+            <div class="col-lg-4">
+              <h6 class="small text-muted mb-2"><i class="bi bi-google me-1"></i>Google</h6>
+              <div class="mb-2"><label class="form-label small">Client ID</label>
+                <input type="text" class="form-control form-control-sm" id="int_google_id" value="${App.escapeHtml(intVal(v, 'oauth.google.client_id'))}"></div>
+              ${secretField('int_google_secret', 'Client Secret', v, 'oauth.google.client_secret', 'Google client secret')}
+              <small class="text-muted">Redirect: <code>${App.escapeHtml(redirects.google || '')}</code></small>
+            </div>
+            <div class="col-lg-4">
+              <h6 class="small text-muted mb-2"><i class="bi bi-facebook me-1"></i>Facebook</h6>
+              <div class="mb-2"><label class="form-label small">Client ID</label>
+                <input type="text" class="form-control form-control-sm" id="int_fb_id" value="${App.escapeHtml(intVal(v, 'oauth.facebook.client_id'))}"></div>
+              ${secretField('int_fb_secret', 'Client Secret', v, 'oauth.facebook.client_secret', 'Facebook client secret')}
+              <small class="text-muted">Redirect: <code>${App.escapeHtml(redirects.facebook || '')}</code></small>
+            </div>
+            <div class="col-lg-4">
+              <h6 class="small text-muted mb-2"><i class="bi bi-github me-1"></i>GitHub</h6>
+              <div class="mb-2"><label class="form-label small">Client ID</label>
+                <input type="text" class="form-control form-control-sm" id="int_gh_id" value="${App.escapeHtml(intVal(v, 'oauth.github.client_id'))}"></div>
+              ${secretField('int_gh_secret', 'Client Secret', v, 'oauth.github.client_secret', 'GitHub client secret')}
+              <small class="text-muted">Redirect: <code>${App.escapeHtml(redirects.github || '')}</code></small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-cloud me-2"></i>Cloudflare DNS</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              ${secretField('int_cf_token', 'API Token', v, 'cloudflare.api_token', 'Cloudflare API token')}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold">Zone ID (institution.bd)</label>
+              <input type="text" class="form-control form-control-sm" id="int_cf_zone_inst" value="${App.escapeHtml(intVal(v, 'cloudflare.zones.institution_bd'))}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold">Zone ID (smartschool.bd)</label>
+              <input type="text" class="form-control form-control-sm" id="int_cf_zone_ss" value="${App.escapeHtml(intVal(v, 'cloudflare.zones.smartschool_bd'))}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Target type</label>
+              <select class="form-select form-select-sm" id="int_cf_target_type">
+                <option value="CNAME" ${intVal(v,'cloudflare.target_type')==='CNAME'?'selected':''}>CNAME</option>
+                <option value="A" ${intVal(v,'cloudflare.target_type')==='A'?'selected':''}>A</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Target value</label>
+              <input type="text" class="form-control form-control-sm" id="int_cf_target_val" value="${App.escapeHtml(intVal(v, 'cloudflare.target_value'))}" placeholder="e.g. your-server.example.com">
+            </div>
+            <div class="col-md-4 d-flex align-items-end gap-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="int_cf_proxied" ${intVal(v,'cloudflare.proxied')==='1'?'checked':''}>
+                <label class="form-check-label small" for="int_cf_proxied">Proxied</label>
+              </div>
+              <button class="btn btn-outline-primary btn-sm" data-cf-test><i class="bi bi-arrow-repeat me-1"></i>Test</button>
+            </div>
+          </div>
+          <div class="mt-2" data-cf-test-result></div>
+        </div>
+      </div>
+
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-whatsapp me-2"></i>WhatsApp Support</h6>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Support number</label>
+              <input type="text" class="form-control form-control-sm" id="int_wa_number" value="${App.escapeHtml(intVal(v, 'whatsapp.support_number'))}" placeholder="8801XXXXXXXXX">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label small fw-semibold">Prefilled message</label>
+              <input type="text" class="form-control form-control-sm" id="int_wa_msg" value="${App.escapeHtml(intVal(v, 'whatsapp.support_prefilled_message'))}" placeholder="Hi, I need help with...">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Community URL</label>
+              <input type="url" class="form-control form-control-sm" id="int_wa_community" value="${App.escapeHtml(intVal(v, 'whatsapp.community_url'))}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Community title</label>
+              <input type="text" class="form-control form-control-sm" id="int_wa_title" value="${App.escapeHtml(intVal(v, 'whatsapp.community_title'))}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Community subtitle</label>
+              <input type="text" class="form-control form-control-sm" id="int_wa_subtitle" value="${App.escapeHtml(intVal(v, 'whatsapp.community_subtitle'))}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-envelope me-2"></i>Email / SMTP</h6>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold">Transport</label>
+              <select class="form-select form-select-sm" id="int_mail_transport">
+                <option value="smtp" ${intVal(v,'mail.transport')==='smtp'?'selected':''}>SMTP</option>
+                <option value="mail" ${intVal(v,'mail.transport')==='mail'?'selected':''}>PHP mail()</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">From email</label>
+              <input type="email" class="form-control form-control-sm" id="int_mail_from_email" value="${App.escapeHtml(intVal(v, 'mail.from_email'))}">
+            </div>
+            <div class="col-md-5">
+              <label class="form-label small fw-semibold">From name</label>
+              <input type="text" class="form-control form-control-sm" id="int_mail_from_name" value="${App.escapeHtml(intVal(v, 'mail.from_name'))}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">SMTP host</label>
+              <input type="text" class="form-control form-control-sm" id="int_smtp_host" value="${App.escapeHtml(intVal(v, 'mail.smtp_host'))}" placeholder="smtp.gmail.com">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold">Port</label>
+              <input type="number" class="form-control form-control-sm" id="int_smtp_port" value="${App.escapeHtml(intVal(v, 'mail.smtp_port'))}" placeholder="587">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold">Secure</label>
+              <select class="form-select form-select-sm" id="int_smtp_secure">
+                <option value="" ${intVal(v,'mail.smtp_secure')===''?'selected':''}>None</option>
+                <option value="tls" ${intVal(v,'mail.smtp_secure')==='tls'?'selected':''}>TLS</option>
+                <option value="ssl" ${intVal(v,'mail.smtp_secure')==='ssl'?'selected':''}>SSL</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">SMTP user</label>
+              <input type="text" class="form-control form-control-sm" id="int_smtp_user" value="${App.escapeHtml(intVal(v, 'mail.smtp_user'))}">
+            </div>
+            <div class="col-md-4">
+              ${secretField('int_smtp_pass', 'SMTP password', v, 'mail.smtp_pass', 'SMTP password')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-key me-2"></i>JWT Secret</h6>
+          <div class="d-flex align-items-end gap-3">
+            <div class="flex-grow-1">
+              ${secretField('int_jwt_secret', 'JWT Secret', v, 'jwt.secret', 'JWT signing key')}
+            </div>
+            <button class="btn btn-outline-danger btn-sm mb-3" data-rotate-jwt><i class="bi bi-arrow-clockwise me-1"></i>Rotate</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" data-save-integrations><i class="bi bi-check-lg me-1"></i>Save All Integrations</button>
+    `;
+
+    // Wire CF test
+    host.querySelector('[data-cf-test]')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const result = host.querySelector('[data-cf-test-result]');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      try {
+        const r = await App.api('/admin/integrations/test', { method: 'POST', body: { target: 'cloudflare' } });
+        if (r.ok) {
+          const zoneList = (r.zones || []).map(z => `<code>${App.escapeHtml(z.name)}</code> (${App.escapeHtml(z.id)})`).join(', ');
+          result.innerHTML = `<div class="alert alert-success small py-2 mb-0"><i class="bi bi-check-circle me-1"></i>${App.escapeHtml(r.message)}${zoneList ? '<br>Zones: ' + zoneList : ''}</div>`;
+        } else {
+          result.innerHTML = `<div class="alert alert-danger small py-2 mb-0"><i class="bi bi-x-circle me-1"></i>${App.escapeHtml(r.message)}${r.hint ? '<br><small>' + App.escapeHtml(r.hint) + '</small>' : ''}</div>`;
+        }
+      } catch (err) {
+        result.innerHTML = `<div class="alert alert-danger small py-2 mb-0">${App.escapeHtml(err?.detail || 'Test failed')}</div>`;
+      }
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test';
+    });
+
+
+    // Wire rotate JWT
+    host.querySelector('[data-rotate-jwt]')?.addEventListener('click', async () => {
+      if (!confirm('Rotate JWT secret? All sessions (including yours) will be invalidated.')) return;
+      try {
+        const r = await App.api('/admin/integrations/rotate-jwt', { method: 'POST' });
+        App.toast(r.message || 'JWT rotated', 'success');
+      } catch (err) { App.toast(err?.detail || 'Rotation failed', 'error'); }
+    });
+
+    // Wire save all
+    host.querySelector('[data-save-integrations]')?.addEventListener('click', async () => {
+      const btn = host.querySelector('[data-save-integrations]');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+      const values = {
+        'site.url': host.querySelector('#int_site_url').value.trim(),
+        'brand.name': host.querySelector('#int_brand_name').value.trim(),
+        'oauth.google.client_id': host.querySelector('#int_google_id').value.trim(),
+        'oauth.google.client_secret': host.querySelector('#int_google_secret').value.trim(),
+        'oauth.facebook.client_id': host.querySelector('#int_fb_id').value.trim(),
+        'oauth.facebook.client_secret': host.querySelector('#int_fb_secret').value.trim(),
+        'oauth.github.client_id': host.querySelector('#int_gh_id').value.trim(),
+        'oauth.github.client_secret': host.querySelector('#int_gh_secret').value.trim(),
+        'cloudflare.api_token': host.querySelector('#int_cf_token').value.trim(),
+        'cloudflare.zones.institution_bd': host.querySelector('#int_cf_zone_inst').value.trim(),
+        'cloudflare.zones.smartschool_bd': host.querySelector('#int_cf_zone_ss').value.trim(),
+        'cloudflare.target_type': host.querySelector('#int_cf_target_type').value,
+        'cloudflare.target_value': host.querySelector('#int_cf_target_val').value.trim(),
+        'cloudflare.proxied': host.querySelector('#int_cf_proxied').checked ? '1' : '0',
+        'whatsapp.support_number': host.querySelector('#int_wa_number').value.trim(),
+        'whatsapp.support_prefilled_message': host.querySelector('#int_wa_msg').value.trim(),
+        'whatsapp.community_url': host.querySelector('#int_wa_community').value.trim(),
+        'whatsapp.community_title': host.querySelector('#int_wa_title').value.trim(),
+        'whatsapp.community_subtitle': host.querySelector('#int_wa_subtitle').value.trim(),
+        'mail.transport': host.querySelector('#int_mail_transport').value,
+        'mail.from_email': host.querySelector('#int_mail_from_email').value.trim(),
+        'mail.from_name': host.querySelector('#int_mail_from_name').value.trim(),
+        'mail.smtp_host': host.querySelector('#int_smtp_host').value.trim(),
+        'mail.smtp_port': host.querySelector('#int_smtp_port').value.trim(),
+        'mail.smtp_secure': host.querySelector('#int_smtp_secure').value,
+        'mail.smtp_user': host.querySelector('#int_smtp_user').value.trim(),
+        'mail.smtp_pass': host.querySelector('#int_smtp_pass').value.trim(),
+        'jwt.secret': host.querySelector('#int_jwt_secret').value.trim(),
+      };
+
+      try {
+        await App.api('/admin/integrations', { method: 'POST', body: { values } });
+        App.toast('Integrations saved', 'success');
+      } catch (err) { App.toast(err?.detail || 'Save failed', 'error'); }
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save All Integrations';
+    });
+  }
+
+
+  // ─── Admin Payments Pane ───────────────────────────────────────────────────
+
+  let _payMethods = [];
+  let _payEditing = null;
 
   function loadAdminPayments() {
     const host = document.querySelector('[data-payments-admin-host]');
     if (!host || host.dataset.loaded) return;
     host.dataset.loaded = '1';
-    host.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-body"><p class="text-muted">Payment methods configuration panel...</p></div></div>';
+    host.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+
+    fetchPayMethods(host);
   }
+
+  async function fetchPayMethods(host) {
+    if (!host) host = document.querySelector('[data-payments-admin-host]');
+    try {
+      const r = await App.api('/admin/support/payments');
+      _payMethods = r.items || [];
+      renderPayMethods(host);
+    } catch (e) {
+      host.innerHTML = `<div class="alert alert-danger">${App.escapeHtml(e?.detail || 'Failed')}</div>`;
+    }
+  }
+
+  function renderPayMethods(host) {
+    const rows = _payMethods.map(m => `
+      <tr>
+        <td><span class="badge bg-secondary-subtle text-secondary">${App.escapeHtml(m.method)}</span></td>
+        <td>${App.escapeHtml(m.label)}</td>
+        <td class="small text-muted">${App.escapeHtml(m.number || '—')}</td>
+        <td>
+          <div class="form-check form-switch d-inline-block">
+            <input class="form-check-input" type="checkbox" data-pay-toggle="${m.id}" ${m.visible ? 'checked' : ''}>
+          </div>
+        </td>
+        <td class="small">${m.sort_order}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-primary me-1" data-pay-edit="${m.id}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-sm btn-outline-danger" data-pay-del="${m.id}"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+
+
+    host.innerHTML = `
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold mb-0"><i class="bi bi-credit-card me-2"></i>Payment Methods</h6>
+            <button class="btn btn-primary btn-sm" data-pay-add><i class="bi bi-plus-lg me-1"></i>Add Method</button>
+          </div>
+          ${_payMethods.length ? `
+          <div class="table-responsive">
+            <table class="table table-sm align-middle dash-table-v5">
+              <thead><tr><th>Method</th><th>Label</th><th>Number</th><th>Visible</th><th>Order</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>` : '<p class="text-muted small">No payment methods configured yet.</p>'}
+          <div data-pay-form-host></div>
+        </div>
+      </div>`;
+
+    // Wire toggle visibility
+    host.querySelectorAll('[data-pay-toggle]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const id = cb.getAttribute('data-pay-toggle');
+        try {
+          await App.api(`/admin/support/payments/${id}`, { method: 'PATCH', body: { visible: cb.checked } });
+          App.toast('Visibility updated', 'success');
+        } catch (e) { App.toast(e?.detail || 'Failed', 'error'); cb.checked = !cb.checked; }
+      });
+    });
+
+    // Wire edit
+    host.querySelectorAll('[data-pay-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.getAttribute('data-pay-edit'), 10);
+        _payEditing = _payMethods.find(m => m.id === id) || null;
+        renderPayForm(host);
+      });
+    });
+
+    // Wire delete
+    host.querySelectorAll('[data-pay-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this payment method?')) return;
+        const id = btn.getAttribute('data-pay-del');
+        try {
+          await App.api(`/admin/support/payments/${id}`, { method: 'DELETE' });
+          App.toast('Deleted', 'success');
+          host.dataset.loaded = ''; loadAdminPayments();
+        } catch (e) { App.toast(e?.detail || 'Failed', 'error'); }
+      });
+    });
+
+    // Wire add
+    host.querySelector('[data-pay-add]')?.addEventListener('click', () => {
+      _payEditing = null;
+      renderPayForm(host);
+    });
+  }
+
+
+  function renderPayForm(host) {
+    const formHost = host.querySelector('[data-pay-form-host]');
+    if (!formHost) return;
+    const m = _payEditing;
+    const methodOptions = ['bkash','nagad','rocket','upay','bank','card','paypal','crypto','other']
+      .map(o => `<option value="${o}" ${m?.method === o ? 'selected' : ''}>${o.charAt(0).toUpperCase() + o.slice(1)}</option>`).join('');
+
+    formHost.innerHTML = `
+      <hr>
+      <h6 class="fw-semibold small">${m ? 'Edit' : 'Add'} Payment Method</h6>
+      <form data-pay-form>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label small">Method</label>
+            <select class="form-select form-select-sm" name="method">${methodOptions}</select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Label</label>
+            <input type="text" class="form-control form-control-sm" name="label" value="${App.escapeHtml(m?.label || '')}" required placeholder="e.g. Personal bKash">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Number</label>
+            <input type="text" class="form-control form-control-sm" name="number" value="${App.escapeHtml(m?.number || '')}" placeholder="01XXXXXXXXX">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small">Sort order</label>
+            <input type="number" class="form-control form-control-sm" name="sort_order" value="${m?.sort_order ?? 0}" min="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Note</label>
+            <input type="text" class="form-control form-control-sm" name="note" value="${App.escapeHtml(m?.note || '')}" placeholder="Optional instructions">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">QR URL</label>
+            <input type="text" class="form-control form-control-sm" name="qr_url" value="${App.escapeHtml(m?.qr_url || '')}" placeholder="/uploads/qr.png or https://...">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="visible" ${m ? (m.visible ? 'checked' : '') : 'checked'}>
+              <label class="form-check-label small">Visible</label>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i>${m ? 'Update' : 'Create'}</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-pay-cancel>Cancel</button>
+        </div>
+      </form>`;
+
+    formHost.querySelector('[data-pay-cancel]').addEventListener('click', () => { formHost.innerHTML = ''; });
+    formHost.querySelector('[data-pay-form]').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        method: fd.get('method'),
+        label: fd.get('label'),
+        number: fd.get('number'),
+        note: fd.get('note'),
+        qr_url: fd.get('qr_url'),
+        sort_order: parseInt(fd.get('sort_order'), 10) || 0,
+        visible: !!e.target.querySelector('[name=visible]').checked,
+      };
+      try {
+        if (m) {
+          await App.api(`/admin/support/payments/${m.id}`, { method: 'PATCH', body });
+        } else {
+          await App.api('/admin/support/payments', { method: 'POST', body });
+        }
+        App.toast(m ? 'Updated' : 'Created', 'success');
+        host.dataset.loaded = ''; loadAdminPayments();
+      } catch (err) { App.toast(err?.detail || 'Save failed', 'error'); }
+    });
+  }
+
+
+  // ─── Renewals Pane ─────────────────────────────────────────────────────────
+
+  let _renewalFilter = { status: 'pending', q: '' };
 
   function loadRenewals() {
     const host = document.querySelector('[data-renewals-host]');
     if (!host || host.dataset.loaded) return;
     host.dataset.loaded = '1';
-    host.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-body"><p class="text-muted">Renewals management panel loads from API...</p></div></div>';
+    renderRenewalsPane(host);
+    fetchRenewals(host);
+  }
+
+  function renderRenewalsPane(host) {
+    host.innerHTML = `
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-arrow-repeat me-2"></i>Domain Renewals</h6>
+          <form class="row g-2 mb-3" data-renewals-filter>
+            <div class="col-auto">
+              <select class="form-select form-select-sm" data-ren-status>
+                <option value="pending" selected>Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="any">All</option>
+              </select>
+            </div>
+            <div class="col">
+              <input type="text" class="form-control form-control-sm" data-ren-q placeholder="Search domain, owner...">
+            </div>
+          </form>
+          <div data-renewals-table></div>
+        </div>
+      </div>`;
+
+    const statusSel = host.querySelector('[data-ren-status]');
+    const qInput = host.querySelector('[data-ren-q]');
+    statusSel.addEventListener('change', () => { _renewalFilter.status = statusSel.value; fetchRenewals(host); });
+    const debouncedSearch = App.debounce(() => { _renewalFilter.q = (qInput.value || '').trim(); fetchRenewals(host); }, 300);
+    qInput.addEventListener('input', debouncedSearch);
+    host.querySelector('[data-renewals-filter]').addEventListener('submit', e => e.preventDefault());
+  }
+
+
+  async function fetchRenewals(host) {
+    const tbody = host.querySelector('[data-renewals-table]');
+    if (!tbody) return;
+    tbody.innerHTML = '<div class="skeleton-v5" style="height:80px;"></div>';
+
+    try {
+      const r = await App.api('/admin/renewals' + App.qs({ status: _renewalFilter.status, q: _renewalFilter.q }));
+      const items = r.items || [];
+
+      // Update sidebar badge for pending count
+      if (_renewalFilter.status === 'pending' || _renewalFilter.status === 'any') {
+        const badge = document.querySelector('[data-nav-renewals-pending]');
+        const pendingCount = _renewalFilter.status === 'pending' ? items.length : items.filter(i => i.status === 'pending').length;
+        if (badge) { badge.textContent = pendingCount; badge.hidden = pendingCount === 0; }
+      }
+
+      if (!items.length) {
+        tbody.innerHTML = '<p class="text-muted small text-center py-3"><i class="bi bi-check-circle fs-4 d-block mb-2 text-success"></i>No renewals match this filter.</p>';
+        return;
+      }
+
+      const statusBadgeRen = (s) => {
+        const map = { pending: 'bg-warning-subtle text-warning', approved: 'bg-success-subtle text-success', rejected: 'bg-danger-subtle text-danger' };
+        return `<span class="badge ${map[s] || 'bg-secondary-subtle text-secondary'}">${App.escapeHtml(s)}</span>`;
+      };
+
+      tbody.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-sm align-middle dash-table-v5">
+            <thead><tr><th>Domain</th><th>Owner</th><th>Price</th><th>Term</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
+            <tbody>${items.map(i => `
+              <tr>
+                <td><code>${App.escapeHtml(i.institution?.subdomain || '—')}</code></td>
+                <td class="small">${App.escapeHtml(i.owner?.name || i.owner?.email || '—')}</td>
+                <td class="small">${i.amount_bdt != null ? App.escapeHtml(String(i.amount_bdt)) + ' BDT' : '—'}</td>
+                <td class="small">${i.term_days || '—'} days</td>
+                <td>${statusBadgeRen(i.status)}</td>
+                <td class="small text-muted">${App.escapeHtml(App.fmtDate(i.created_at))}</td>
+                <td class="text-end">${i.status === 'pending' ? `
+                  <button class="btn btn-sm btn-success me-1" data-ren-decide="${i.id}" data-decision="approve"><i class="bi bi-check-lg"></i></button>
+                  <button class="btn btn-sm btn-danger" data-ren-decide="${i.id}" data-decision="reject"><i class="bi bi-x-lg"></i></button>
+                ` : ''}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+
+
+      // Wire approve/reject buttons
+      tbody.querySelectorAll('[data-ren-decide]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-ren-decide');
+          const decision = btn.getAttribute('data-decision');
+          let note = '';
+          if (decision === 'reject') {
+            note = (prompt('Rejection note (optional):') || '').trim();
+          }
+          if (!confirm(`${decision === 'approve' ? 'Approve' : 'Reject'} this renewal?`)) return;
+          btn.disabled = true;
+          try {
+            await App.api(`/admin/renewals/${id}/decide`, { method: 'POST', body: { decision, note } });
+            App.toast(`Renewal ${decision}d`, 'success');
+            fetchRenewals(host);
+          } catch (err) {
+            App.toast(err?.detail || 'Action failed', 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      tbody.innerHTML = `<div class="alert alert-danger small">${App.escapeHtml(e?.detail || 'Failed to load renewals')}</div>`;
+    }
   }
 
 })();

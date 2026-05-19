@@ -262,7 +262,7 @@
             <span class="badge ${c.dns_status==='live' ? 'bg-success' : 'bg-warning'}">${App.escapeHtml(c.dns_status || 'pending')}</span>
             <a class="btn btn-sm btn-outline-primary" target="_blank" href="https://${App.escapeHtml(c.subdomain)}">Open site <i class="bi bi-box-arrow-up-right ms-1"></i></a>
           </div>
-          <div data-dns-host="${c.id}"><p class="text-muted">DNS management panel loads here...</p></div>
+          <div data-dns-host="${c.id}"><div class="skeleton-v5" style="height:60px;"></div></div>
         </div>` : ''}
         <div class="tab-pane fade ${isVerified ? '' : 'show active'}" id="tab-profile">
           <form data-form-profile="${c.id}">
@@ -360,8 +360,246 @@
     }
 
     manageModalInstance.show();
+
+    // Load DNS records for verified domains
+    if (isVerified) loadDnsRecords(c.id, c.subdomain);
   }
 
+
+  // ─── DNS Records CRUD (auto-syncs via Cloudflare) ───────────────────────────
+
+  const DNS_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS'];
+
+  async function loadDnsRecords(claimId, subdomain) {
+    const host = manageBody.querySelector(`[data-dns-host="${claimId}"]`);
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton-v5" style="height:60px;"></div>';
+
+    try {
+      const r = await App.api(`/tenant/${claimId}/dns`);
+      const records = r.items || [];
+      renderDnsTable(host, records, claimId, subdomain || r.subdomain);
+    } catch (e) {
+      host.innerHTML = `<div class="alert alert-danger small py-2">${App.escapeHtml(e?.detail || 'Could not load DNS records')}</div>`;
+    }
+  }
+
+  function renderDnsTable(host, records, claimId, subdomain) {
+    const typeBadge = (type) => {
+      const colors = { A: 'primary', AAAA: 'info', CNAME: 'success', TXT: 'secondary', MX: 'warning', NS: 'dark' };
+      return `<span class="badge bg-${colors[type] || 'secondary'}-subtle text-${colors[type] || 'secondary'}">${type}</span>`;
+    };
+
+    host.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted small mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Manage DNS records for <code>${App.escapeHtml(subdomain)}</code>. Changes auto-sync to Cloudflare.
+        </p>
+        <button class="btn btn-primary btn-sm" data-dns-add="${claimId}">
+          <i class="bi bi-plus-lg me-1"></i>Add Record
+        </button>
+      </div>
+      ${records.length ? `
+      <div class="table-responsive">
+        <table class="table table-sm align-middle dash-table-v5 mb-0">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Name</th>
+              <th>Content</th>
+              <th>TTL</th>
+              <th>Proxy</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${records.map(rec => {
+              const fqdn = (rec.name === '@' || rec.name === '' || rec.name === subdomain)
+                ? subdomain
+                : `${rec.name}.${subdomain}`;
+              return `
+              <tr>
+                <td>${typeBadge(rec.type)}</td>
+                <td><code class="small">${App.escapeHtml(fqdn)}</code></td>
+                <td class="small" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${App.escapeHtml(rec.content)}">${App.escapeHtml(rec.content)}${rec.priority != null ? ` <span class="text-muted">(pri: ${rec.priority})</span>` : ''}</td>
+                <td class="small text-muted">${rec.ttl === 1 ? 'Auto' : rec.ttl}</td>
+                <td>${['A','AAAA','CNAME'].includes(rec.type) ? (rec.proxied ? '<i class="bi bi-cloud-fill text-warning"></i>' : '<i class="bi bi-cloud text-muted"></i>') : '<span class="text-muted">—</span>'}</td>
+                <td class="text-end">
+                  <button class="btn btn-sm btn-outline-primary me-1" data-dns-edit="${rec.id}" data-claim="${claimId}" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" data-dns-del="${rec.id}" data-claim="${claimId}" title="Delete">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>` : `
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-hdd-stack fs-2 d-block mb-2"></i>
+        <p class="small mb-0">No DNS records yet. Add one to point your subdomain at your hosting.</p>
+      </div>`}
+      <div data-dns-form-host="${claimId}"></div>
+    `;
+
+    // Wire Add button
+    host.querySelector(`[data-dns-add="${claimId}"]`)?.addEventListener('click', () => {
+      openDnsForm(claimId, subdomain, null, host);
+    });
+
+    // Wire Edit buttons
+    host.querySelectorAll('[data-dns-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const recId = parseInt(btn.getAttribute('data-dns-edit'), 10);
+        const rec = records.find(r => r.id === recId);
+        if (rec) openDnsForm(claimId, subdomain, rec, host);
+      });
+    });
+
+    // Wire Delete buttons
+    host.querySelectorAll('[data-dns-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const recId = btn.getAttribute('data-dns-del');
+        if (!confirm('Delete this DNS record? This will remove it from Cloudflare immediately.')) return;
+        btn.disabled = true;
+        try {
+          await App.api(`/tenant/${claimId}/dns/${recId}`, { method: 'DELETE' });
+          App.toast('DNS record deleted & removed from Cloudflare', 'success');
+          loadDnsRecords(claimId, subdomain);
+        } catch (e) {
+          App.toast(e?.detail || 'Delete failed', 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  function openDnsForm(claimId, subdomain, rec, host) {
+    const formHost = host.querySelector(`[data-dns-form-host="${claimId}"]`);
+    if (!formHost) return;
+    const isEdit = !!rec;
+
+    formHost.innerHTML = `
+      <div class="card border bg-body-secondary mt-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold mb-0">
+              <i class="bi bi-${isEdit ? 'pencil-square' : 'plus-circle'} me-1"></i>
+              ${isEdit ? 'Edit' : 'Add'} DNS Record
+            </h6>
+            <button class="btn btn-sm btn-outline-secondary" data-dns-cancel>
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <form data-dns-save="${claimId}">
+            <div class="row g-3">
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold">Type</label>
+                <select class="form-select form-select-sm" name="type" required>
+                  ${DNS_TYPES.map(t => `<option value="${t}" ${rec?.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold">Name</label>
+                <input type="text" class="form-control form-control-sm" name="name"
+                  value="${App.escapeHtml(rec?.name || '@')}" placeholder="@ for apex, www, mail..."
+                  required maxlength="120">
+                <small class="text-muted">Use <code>@</code> for ${App.escapeHtml(subdomain)}</small>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold">Content / Value</label>
+                <input type="text" class="form-control form-control-sm" name="content"
+                  value="${App.escapeHtml(rec?.content || '')}"
+                  placeholder="e.g. 203.0.113.10 or hostname.example.com"
+                  required maxlength="512">
+              </div>
+              <div class="col-md-1">
+                <label class="form-label small fw-semibold">TTL</label>
+                <input type="number" class="form-control form-control-sm" name="ttl"
+                  value="${rec?.ttl ?? 1}" min="0">
+              </div>
+              <div class="col-md-2" data-mx-field ${rec?.type === 'MX' ? '' : 'hidden'}>
+                <label class="form-label small fw-semibold">Priority</label>
+                <input type="number" class="form-control form-control-sm" name="priority"
+                  value="${rec?.priority ?? 10}" min="0" max="65535">
+              </div>
+              <div class="col-12" data-proxy-field ${rec && ['A','AAAA','CNAME'].includes(rec.type) ? '' : 'hidden'}>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="dns_proxied_${claimId}" name="proxied" ${rec?.proxied ? 'checked' : ''}>
+                  <label class="form-check-label small" for="dns_proxied_${claimId}">
+                    <i class="bi bi-cloud-fill text-warning me-1"></i>
+                    Proxy through Cloudflare (orange cloud — auto SSL + cache)
+                  </label>
+                </div>
+              </div>
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <i class="bi bi-cloud-upload me-1"></i>${isEdit ? 'Update & Sync to Cloudflare' : 'Create & Push to Cloudflare'}
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-dns-cancel>Cancel</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>`;
+
+    // Toggle MX priority / Proxy field based on type
+    const typeSelect = formHost.querySelector('[name="type"]');
+    const mxField = formHost.querySelector('[data-mx-field]');
+    const proxyField = formHost.querySelector('[data-proxy-field]');
+    typeSelect.addEventListener('change', () => {
+      mxField.hidden = typeSelect.value !== 'MX';
+      proxyField.hidden = !['A', 'AAAA', 'CNAME'].includes(typeSelect.value);
+    });
+
+    // Wire cancel
+    formHost.querySelectorAll('[data-dns-cancel]').forEach(btn => {
+      btn.addEventListener('click', () => { formHost.innerHTML = ''; });
+    });
+
+    // Wire submit
+    formHost.querySelector(`[data-dns-save="${claimId}"]`).addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      const payload = {
+        type: fd.get('type'),
+        name: (fd.get('name') || '@').trim() || '@',
+        content: (fd.get('content') || '').trim(),
+        ttl: parseInt(fd.get('ttl') || '1', 10),
+        priority: fd.get('priority') ? parseInt(fd.get('priority'), 10) : null,
+        proxied: !!ev.target.querySelector('[name="proxied"]')?.checked,
+      };
+
+      const submitBtn = ev.target.querySelector('[type="submit"]');
+      const origHtml = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Syncing to Cloudflare...';
+
+      try {
+        if (isEdit) {
+          await App.api(`/tenant/${claimId}/dns/${rec.id}`, { method: 'PATCH', body: payload });
+          App.toast('DNS record updated & synced to Cloudflare', 'success');
+        } else {
+          await App.api(`/tenant/${claimId}/dns`, { method: 'POST', body: payload });
+          App.toast('DNS record created & pushed to Cloudflare', 'success');
+        }
+        formHost.innerHTML = '';
+        loadDnsRecords(claimId, subdomain);
+      } catch (e) {
+        if (e?.errors) {
+          const firstErr = Object.values(e.errors)[0];
+          App.toast(firstErr || e.detail || 'Save failed', 'error');
+        } else {
+          App.toast(e?.detail || 'Failed to sync DNS record to Cloudflare', 'error');
+        }
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
+      }
+    });
+  }
 
   // ─── Account Card (Settings pane) ──────────────────────────────────────────
 
