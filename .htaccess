@@ -1,0 +1,67 @@
+# --- institution.bd / smartschool.bd — root .htaccess (v2) ---
+# 1) /api/* is dispatched by api/.htaccess (do nothing here, falls through).
+# 2) /uploads/* serves static files (also handled by uploads/.htaccess).
+# 3) /auth/callback resolves to /auth/callback.php (OAuth landing).
+# 4) Pretty URLs: /dashboard, /admin, /directory, /claim, /institution
+#    each resolve to their .php file.
+# 5) Anything else without a real file 404s.
+
+RewriteEngine On
+
+# Optional: force HTTPS once your hosting provides an SSL cert.
+# RewriteCond %{HTTPS} !=on
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# Don't rewrite real files / directories.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Hand /api/* to api/index.php (Apache will also descend into api/.htaccess).
+RewriteRule ^api/?$ api/index.php [L]
+RewriteRule ^api/(.*)$ api/index.php?path=$1 [QSA,L]
+
+# Hand uploads through unchanged.
+RewriteRule ^uploads/ - [L]
+
+# OAuth landing: /auth/callback -> /auth/callback.php
+RewriteRule ^auth/callback/?$ auth/callback.php [L]
+
+# Pretty URLs for the top-level pages (extensionless).
+RewriteRule ^directory/?$    directory.php    [L]
+RewriteRule ^claim/?$        claim.php        [L]
+RewriteRule ^dashboard/?$    dashboard.php    [L]
+RewriteRule ^admin/?$        admin.php        [L]
+RewriteRule ^institution/?$  institution.php  [L]
+RewriteRule ^privacy/?$      privacy.php      [L]
+RewriteRule ^terms/?$        terms.php        [L]
+RewriteRule ^reset-password/?$ reset-password.php [L]
+RewriteRule ^sitemap\.xml$   sitemap.xml.php  [L]
+
+# Single institution page: /i/<brand>/<slug> -> institution.php?brand=&slug=
+RewriteRule ^i/([^/]+)/([^/]+)/?$ institution.php?brand=$1&slug=$2 [QSA,L]
+
+# Home fallback for plain /
+RewriteRule ^$ index.php [L]
+
+# Basic hardening.
+Options -Indexes
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Aggressive caching for static assets.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/svg+xml      "access plus 30 days"
+    ExpiresByType image/png          "access plus 30 days"
+    ExpiresByType image/jpeg         "access plus 30 days"
+    ExpiresByType image/webp         "access plus 30 days"
+    ExpiresByType text/css           "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType font/woff          "access plus 30 days"
+    ExpiresByType font/woff2         "access plus 30 days"
+</IfModule>
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css application/javascript image/svg+xml
+</IfModule>

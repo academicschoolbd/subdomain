@@ -1,0 +1,16 @@
+# All /api/* requests funnel through index.php
+RewriteEngine On
+
+# Allow direct access to uploaded files isn't here — uploads/ lives one level up.
+
+# Don't rewrite real files (we don't have any in api/ besides index.php and config files,
+# but it's good practice).
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule .* - [L]
+
+# Block direct access to PHP includes (config, lib, routes).
+RewriteRule ^(config|config\.example|bootstrap)\.php$ - [F,L]
+RewriteRule ^(lib|routes|data)/ - [F,L]
+
+# Everything else goes to the front controller, captured as ?path=...
+RewriteRule ^(.*)$ index.php?path=$1 [QSA,L]
