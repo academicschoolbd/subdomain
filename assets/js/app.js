@@ -1,872 +1,579 @@
 /* ===========================================================================
-   institution.bd / smartschool.bd — shared frontend module
-   Vanilla JS. Used by every page. Exposes window.App.
+   institution.bd / smartschool.bd — v5pro shared frontend module
+   Modern ES6+ module. Exposes window.App for page scripts.
    =========================================================================== */
-(function () {
-  'use strict';
 
-  const API_BASE = '/api';
-  const STORAGE_TOKEN = 'inst_jwt';
-  const STORAGE_USER = 'inst_user';
+const API_BASE = '/api';
+const STORAGE_TOKEN = 'inst_jwt';
+const STORAGE_USER = 'inst_user';
+const THEME_KEY = 'inst_theme';
 
-  /* ---------------------------------------------------------------- */
-  /*  v3.0: head bootstrap (manifest, dark-mode, skip-to-content link)  */
-  /* ---------------------------------------------------------------- */
-  const THEME_KEY = 'inst_theme'; // 'light' | 'dark'
+// ─── Theme Management ────────────────────────────────────────────────────────
 
-  function applyTheme(mode) {
-    const root = document.documentElement;
-    root.setAttribute('data-theme', mode);
-    // Sync the meta theme-color so the browser chrome matches. Note: in
-    // v4.5 the inline <style id="theme-vars"> emitted server-side may
-    // also publish brand-tinted theme-color metas; this dynamic update
-    // wins when the user actively toggles.
-    const meta = document.querySelector('meta[name="theme-color"]:not([media])');
-    if (meta) meta.setAttribute('content', mode === 'dark' ? '#0b1220' : '#0f766e');
-    try { localStorage.setItem(THEME_KEY, mode); } catch {}
-  }
-  function currentTheme() {
-    let saved = null;
-    try { saved = localStorage.getItem(THEME_KEY); } catch {}
-    if (saved === 'dark' || saved === 'light') return saved;
-    // Fall back to OS preference.
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-  function toggleTheme() {
-    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
-    renderThemeToggle();
-  }
-  function renderThemeToggle() {
-    const host = document.querySelector('[data-theme-toggle]');
-    if (!host) return;
+function applyTheme(mode) {
+  document.documentElement.setAttribute('data-bs-theme', mode);
+  document.documentElement.setAttribute('data-theme', mode);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = mode === 'dark' ? '#0b1220' : '#0f766e';
+  try { localStorage.setItem(THEME_KEY, mode); } catch {}
+  renderThemeToggle();
+}
+
+function currentTheme() {
+  try { const s = localStorage.getItem(THEME_KEY); if (s === 'dark' || s === 'light') return s; } catch {}
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function toggleTheme() {
+  applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+}
+
+function renderThemeToggle() {
+  document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
     const dark = currentTheme() === 'dark';
-    host.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
-    host.setAttribute('title', dark ? 'Switch to light theme' : 'Switch to dark theme');
-    host.innerHTML = dark
-      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>'
-      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    btn.setAttribute('aria-label', dark ? 'Switch to light' : 'Switch to dark');
+    btn.innerHTML = dark
+      ? '<i class="bi bi-sun-fill"></i>'
+      : '<i class="bi bi-moon-stars-fill"></i>';
+  });
+}
+
+
+// ─── Brand Theme (admin-controllable color) ──────────────────────────────────
+
+function hexToRgb(hex) {
+  if (!hex) return null;
+  hex = String(hex).trim().replace(/^#/, '');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return null;
+  return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+}
+
+function rgbToHex(r,g,b) {
+  const c = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2,'0');
+  return '#' + c(r) + c(g) + c(b);
+}
+
+function mixColor(hex, target, weight) {
+  const a = hexToRgb(hex), b = hexToRgb(target);
+  if (!a || !b) return hex;
+  return rgbToHex(a[0]+(b[0]-a[0])*weight, a[1]+(b[1]-a[1])*weight, a[2]+(b[2]-a[2])*weight);
+}
+
+function rgba(hex, alpha) {
+  const c = hexToRgb(hex);
+  return c ? `rgba(${c[0]},${c[1]},${c[2]},${alpha})` : `rgba(15,118,110,${alpha})`;
+}
+
+function applyBrandTheme(primary, primaryDark) {
+  if (!hexToRgb(primary)) return;
+  if (!primaryDark || !hexToRgb(primaryDark)) primaryDark = mixColor(primary, '#ffffff', 0.3);
+  const css = `:root{--c-primary:${primary};--c-primary-700:${mixColor(primary,'#000',0.12)};--c-primary-50:${rgba(primary,0.08)};--c-primary-100:${rgba(primary,0.18)};--c-link:${primary};}html[data-theme="dark"]{--c-primary:${primaryDark};--c-primary-700:${mixColor(primaryDark,'#000',0.10)};--c-primary-50:${rgba(primaryDark,0.12)};--c-primary-100:${rgba(primaryDark,0.22)};--c-link:${primaryDark};}`;
+  let el = document.getElementById('theme-vars');
+  if (!el) { el = document.createElement('style'); el.id = 'theme-vars'; document.head.appendChild(el); }
+  el.textContent = css;
+  if (_settingsCache?.theme) {
+    _settingsCache.theme.primary = primary;
+    _settingsCache.theme.primary_dark = primaryDark;
+  }
+}
+
+// ─── API Client ──────────────────────────────────────────────────────────────
+
+async function api(path, opts = {}) {
+  const init = { method: opts.method || 'GET', headers: {} };
+  const token = getToken();
+  if (token) init.headers['Authorization'] = 'Bearer ' + token;
+  if (opts.body && !(opts.body instanceof FormData)) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(opts.body);
+  } else if (opts.body instanceof FormData) {
+    init.body = opts.body;
+  }
+  const url = path.startsWith('http') ? path : API_BASE + path;
+  let res;
+  try { res = await fetch(url, init); }
+  catch { throw { detail: 'Network error — please try again.', status: 0 }; }
+
+  let data = null;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    try { data = await res.json(); } catch {}
+  } else if (!res.ok) {
+    data = { detail: await res.text() };
+  }
+  if (!res.ok) {
+    const err = data?.detail ? data : { detail: 'Request failed', status: res.status };
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function qs(params) {
+  if (!params) return '';
+  const parts = Object.entries(params)
+    .filter(([,v]) => v != null && v !== '')
+    .map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  return parts.length ? '?' + parts.join('&') : '';
+}
+
+
+// ─── Auth State ──────────────────────────────────────────────────────────────
+
+function getToken() { try { return localStorage.getItem(STORAGE_TOKEN); } catch { return null; } }
+function getUser() { try { return JSON.parse(localStorage.getItem(STORAGE_USER) || 'null'); } catch { return null; } }
+
+function setSession(token, user) {
+  if (token) localStorage.setItem(STORAGE_TOKEN, token);
+  if (user) localStorage.setItem(STORAGE_USER, JSON.stringify(user));
+  renderUserChip();
+}
+
+function clearSession() {
+  localStorage.removeItem(STORAGE_TOKEN);
+  localStorage.removeItem(STORAGE_USER);
+  renderUserChip();
+}
+
+function isAuthed() { return !!getToken(); }
+function isAdmin() { const u = getUser(); return !!(u?.is_admin); }
+
+function applyVisibilityGates() {
+  const authed = isAuthed(), admin = isAdmin();
+  document.querySelectorAll('[data-auth-only]').forEach(el => { el.hidden = !authed; });
+  document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin; });
+  document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = authed; });
+}
+
+function renderUserChip() {
+  applyVisibilityGates();
+  const host = document.querySelector('[data-user-chip]');
+  if (!host) return;
+  host.innerHTML = '';
+  const user = getUser();
+
+  if (!user) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-primary btn-sm d-flex align-items-center gap-2';
+    btn.setAttribute('data-open-auth', '');
+    btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i><span class="d-none d-sm-inline">Sign in</span>';
+    btn.addEventListener('click', () => openAuthModal());
+    host.appendChild(btn);
+    return;
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  v4.5 — live brand theme (admin-controllable home color).         */
-  /*                                                                  */
-  /*  The server emits an inline <style id="theme-vars"> in <head> on  */
-  /*  every page render so the brand color is correct on first paint. */
-  /*  This helper is used after the admin saves a new color from the  */
-  /*  Settings pane so the entire UI updates without a full reload.   */
-  /* ---------------------------------------------------------------- */
-  function _hexToRgb(hex) {
-    if (!hex) return null;
-    hex = String(hex).trim().toLowerCase();
-    if (hex[0] !== '#') hex = '#' + hex;
-    if (/^#[0-9a-f]{3}$/.test(hex)) {
-      hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
-    }
-    if (!/^#[0-9a-f]{6}$/.test(hex)) return null;
-    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-  }
-  function _rgbToHex(r, g, b) {
-    const c = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
-    return '#' + c(r) + c(g) + c(b);
-  }
-  function _mix(hex, mix, w) {
-    const a = _hexToRgb(hex), b = _hexToRgb(mix);
-    if (!a || !b) return hex;
-    return _rgbToHex(a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w);
-  }
-  function _rgba(hex, alpha) {
-    const a = _hexToRgb(hex);
-    if (!a) return 'rgba(15,118,110,' + alpha + ')';
-    return 'rgba(' + a[0] + ',' + a[1] + ',' + a[2] + ',' + alpha + ')';
-  }
-  function applyBrandTheme(primary, primaryDark) {
-    if (!_hexToRgb(primary)) return;
-    if (!primaryDark || !_hexToRgb(primaryDark)) {
-      primaryDark = _mix(primary, '#ffffff', 0.30);
-    }
-    const css = [
-      ':root{',
-      '--c-primary:' + primary + ';',
-      '--c-primary-700:' + _mix(primary, '#000000', 0.12) + ';',
-      '--c-primary-50:' + _rgba(primary, 0.08) + ';',
-      '--c-primary-100:' + _rgba(primary, 0.18) + ';',
-      '--c-link:' + primary + ';',
-      '}',
-      'html[data-theme="dark"]{',
-      '--c-primary:' + primaryDark + ';',
-      '--c-primary-700:' + _mix(primaryDark, '#000000', 0.10) + ';',
-      '--c-primary-50:' + _rgba(primaryDark, 0.12) + ';',
-      '--c-primary-100:' + _rgba(primaryDark, 0.22) + ';',
-      '--c-link:' + primaryDark + ';',
-      '}'
-    ].join('');
-    let host = document.getElementById('theme-vars');
-    if (!host) {
-      host = document.createElement('style');
-      host.id = 'theme-vars';
-      document.head.appendChild(host);
-    }
-    host.textContent = css;
-    // Bust the settings cache so subsequent reads see the new color too.
-    if (_settingsCache && _settingsCache.theme) {
-      _settingsCache.theme.primary = primary;
-      _settingsCache.theme.primary_dark = primaryDark;
-    }
-  }
+  // Authed: avatar + link
+  const link = document.createElement('a');
+  link.href = user.is_admin ? '/admin.php' : '/dashboard.php';
+  link.className = 'd-flex align-items-center gap-2 text-decoration-none';
+  link.title = user.name || user.email || 'Account';
 
-  function bootHead() {
-    // 1) Apply theme as early as possible.
-    applyTheme(currentTheme());
-
-    // 2) Inject a <link rel="manifest"> if not already present.
-    if (!document.querySelector('link[rel="manifest"]')) {
-      const m = document.createElement('link');
-      m.rel = 'manifest';
-      m.href = '/manifest.webmanifest';
-      document.head.appendChild(m);
-    }
-
-    // 3) Skip-to-content link, prepended at the very top of <body>.
-    if (!document.querySelector('a.skip-link')) {
-      const s = document.createElement('a');
-      s.className = 'skip-link';
-      s.href = '#main';
-      s.textContent = 'Skip to main content';
-      document.body.insertBefore(s, document.body.firstChild);
-      // Make sure the page has a #main landmark for the link to jump to.
-      if (!document.getElementById('main')) {
-        // Pick the first <section> or <main>; otherwise <body>.
-        const target = document.querySelector('main, section');
-        if (target && !target.id) target.id = 'main';
-      }
-    }
-
-    // 4) v4.5 — drop a theme toggle button into the nav CTA. The toggle
-    //    is the first child of .nav__cta so on phones the visual order
-    //    is: [theme-toggle] [signin OR avatar] [hamburger] — matching the
-    //    documented mobile design.
-    const cta = document.querySelector('.nav__cta');
-    if (cta && !document.querySelector('[data-theme-toggle]')) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'nav__icobtn nav__theme-toggle';
-      btn.setAttribute('data-theme-toggle', '');
-      btn.addEventListener('click', toggleTheme);
-      cta.insertBefore(btn, cta.firstChild);
-      renderThemeToggle();
-    }
+  const avatar = document.createElement('span');
+  avatar.className = 'd-inline-flex align-items-center justify-content-center rounded-circle text-white fw-bold';
+  avatar.style.cssText = 'width:34px;height:34px;background:var(--c-primary);font-size:0.8rem;';
+  if (user.avatar_url) {
+    avatar.innerHTML = `<img src="${escapeHtml(user.avatar_url)}" alt="" class="rounded-circle" style="width:100%;height:100%;object-fit:cover;">`;
+  } else {
+    avatar.textContent = (user.name || user.email || '?')[0].toUpperCase();
   }
-  // Run as soon as this script loads (head boot must happen before paint
-  // for theme to avoid a flash).
-  bootHead();
-  /* ---------------------------------------------------------------- */
-  async function api(path, opts = {}) {
-    const init = { method: opts.method || 'GET', headers: {} };
-    const token = getToken();
-    if (token) init.headers['Authorization'] = 'Bearer ' + token;
-    if (opts.body && !(opts.body instanceof FormData)) {
-      init.headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(opts.body);
-    } else if (opts.body instanceof FormData) {
-      init.body = opts.body;
-    }
-    const url = path.startsWith('http') ? path : API_BASE + path;
-    let res;
-    try {
-      res = await fetch(url, init);
-    } catch (e) {
-      throw { detail: 'Network error — please try again.', status: 0 };
-    }
-    let data = null;
-    const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      try { data = await res.json(); } catch (e) { /* ignore */ }
-    } else if (!res.ok) {
-      data = { detail: await res.text() };
-    }
-    if (!res.ok) {
-      const err = data && data.detail ? data : { detail: 'Request failed', status: res.status };
-      err.status = res.status;
-      throw err;
-    }
-    return data;
-  }
+  link.appendChild(avatar);
 
-  function qs(params) {
-    if (!params) return '';
-    const parts = [];
-    for (const k in params) {
-      if (params[k] === undefined || params[k] === null || params[k] === '') continue;
-      parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
-    }
-    return parts.length ? '?' + parts.join('&') : '';
-  }
+  const name = document.createElement('span');
+  name.className = 'd-none d-md-inline fw-semibold small';
+  name.textContent = user.name || user.email || 'Account';
+  link.appendChild(name);
+  host.appendChild(link);
+}
 
-  /* ---------------------------------------------------------------- */
-  /*  Auth state                                                       */
-  /* ---------------------------------------------------------------- */
-  function getToken() { try { return localStorage.getItem(STORAGE_TOKEN); } catch { return null; } }
-  function getUser()  { try { return JSON.parse(localStorage.getItem(STORAGE_USER) || 'null'); } catch { return null; } }
-  function setSession(token, user) {
-    if (token) localStorage.setItem(STORAGE_TOKEN, token);
-    if (user) localStorage.setItem(STORAGE_USER, JSON.stringify(user));
-    renderUserChip();
-  }
-  function clearSession() {
-    localStorage.removeItem(STORAGE_TOKEN);
-    localStorage.removeItem(STORAGE_USER);
-    renderUserChip();
-  }
-  function isAuthed() { return !!getToken(); }
-  function isAdmin() { const u = getUser(); return !!(u && u.is_admin); }
 
-  /**
-   * v3.1 — show/hide elements based on whether someone is signed in or is
-   * an admin. Used by the footer / nav so we don't leak the Admin link
-   * to normal visitors.
-   *
-   *   <a data-auth-only  hidden …>My dashboard</a>
-   *   <a data-admin-only hidden …>Admin</a>
-   *   <a data-guest-only          …>Sign in</a>   (hidden once authed)
-   */
-  function applyVisibilityGates() {
-    const authed = isAuthed();
-    const admin  = isAdmin();
-    document.querySelectorAll('[data-auth-only]').forEach((el) => {
-      el.hidden = !authed;
-    });
-    document.querySelectorAll('[data-admin-only]').forEach((el) => {
-      el.hidden = !admin;
-    });
-    document.querySelectorAll('[data-guest-only]').forEach((el) => {
-      el.hidden = !!authed;
-    });
-  }
+// ─── Settings Cache ──────────────────────────────────────────────────────────
 
-  function renderUserChip() {
-    const host = document.querySelector('[data-user-chip]');
-    // v3.1 — also reveal/hide elements gated by [data-admin-only] / [data-auth-only]
-    // anywhere on the page (footer links, nav items, etc.) so the Admin tile
-    // never leaks to a normal visitor.
-    applyVisibilityGates();
-    if (!host) return;
-    const user = getUser();
-    host.innerHTML = '';
-    if (!user) {
-      // v4.5 — explicit "Sign in" affordance. On tablet+ it's a labelled
-      // pill button; on phones the same button collapses to a 40px square
-      // icon (CSS handles the breakpoint). Either way it's always visible
-      // — never hidden behind the hamburger menu.
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'nav__signin';
-      btn.setAttribute('aria-label', 'Sign in');
-      btn.setAttribute('title', 'Sign in');
-      btn.innerHTML =
-        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-        + '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>'
-        + '<polyline points="10 17 15 12 10 7"/>'
-        + '<line x1="15" y1="12" x2="3" y2="12"/>'
-        + '</svg>'
-        + '<span>Sign in</span>';
-      btn.addEventListener('click', () => openAuthModal());
-      host.appendChild(btn);
-      return;
-    }
-    // Authed: avatar + name + sign-out, wrapped in .nav__chip. On phones
-    // the chip collapses to just the avatar (still clickable — it links
-    // to the dashboard / admin console).
-    const link = document.createElement('a');
-    link.href = user.is_admin ? '/admin.php' : '/dashboard.php';
-    link.className = 'nav__chip';
-    link.setAttribute('aria-label', user.is_admin ? 'Open admin console' : 'Open my dashboard');
-    link.setAttribute('title', user.name || user.email || 'My account');
-    const avatar = document.createElement('span');
-    avatar.className = 'avatar';
-    if (user.avatar_url) {
-      const img = document.createElement('img'); img.src = user.avatar_url; img.alt = '';
-      avatar.appendChild(img);
-    } else {
-      avatar.textContent = (user.name || user.email || '?').slice(0, 1).toUpperCase();
-    }
-    const name = document.createElement('span');
-    name.className = 'nav__chip-name';
-    name.textContent = (user.name || user.email || 'Account');
-    link.appendChild(avatar);
-    link.appendChild(name);
-    host.appendChild(link);
+let _settingsCache = null;
+async function getSettings() {
+  if (_settingsCache) return _settingsCache;
+  _settingsCache = await api('/settings');
+  return _settingsCache;
+}
 
-    const out = document.createElement('button');
-    out.type = 'button';
-    out.className = 'nav__chip-out';
-    out.setAttribute('aria-label', 'Sign out');
-    out.setAttribute('title', 'Sign out');
-    out.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
-    out.addEventListener('click', (e) => { e.preventDefault(); clearSession(); location.href = '/'; });
-    host.appendChild(out);
-  }
+// ─── Auth Modal ──────────────────────────────────────────────────────────────
 
-  /* ---------------------------------------------------------------- */
-  /*  Settings (OAuth providers, WhatsApp links)                       */
-  /* ---------------------------------------------------------------- */
-  let _settingsCache = null;
-  async function getSettings() {
-    if (_settingsCache) return _settingsCache;
-    _settingsCache = await api('/settings');
-    return _settingsCache;
-  }
+let _authModal = null;
+let _authModalInstance = null;
+let _modalMode = 'signin';
 
-  /* ---------------------------------------------------------------- */
-  /*  Auth modal (OAuth + email/password)                              */
-  /* ---------------------------------------------------------------- */
-  let _modalEl = null;
-  let _modalMode = 'signin'; // 'signin' | 'signup'
-
-  function ensureModalEl() {
-    if (_modalEl) return _modalEl;
-    const wrap = document.createElement('div');
-    wrap.className = 'modal-bg';
-    wrap.setAttribute('role', 'dialog');
-    wrap.innerHTML = `
-      <div class="modal modal--auth" role="document">
-        <button class="modal__close" aria-label="Close">&times;</button>
-
-        <div class="auth-tabs" role="tablist">
-          <button type="button" class="auth-tab" data-tab="signin" role="tab">Sign in</button>
-          <button type="button" class="auth-tab" data-tab="signup" role="tab">Create account</button>
+function createAuthModal() {
+  if (_authModal) return _authModal;
+  const div = document.createElement('div');
+  div.className = 'modal fade modal-v5 auth-modal';
+  div.id = 'authModal';
+  div.tabIndex = -1;
+  div.innerHTML = `
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <div>
+            <h5 class="modal-title" data-modal-title>Welcome back</h5>
+            <p class="text-muted small mb-0" data-modal-sub>Sign in to manage your subdomains.</p>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-
-        <h2 class="auth-title" data-modal-title>Welcome back</h2>
-        <p class="muted auth-sub" data-modal-sub>Sign in to claim or manage your free subdomain.</p>
-
-        <div class="oauth-list" data-modal-providers></div>
-
-        <div class="auth-divider" data-auth-divider><span>or with email</span></div>
-
-        <form class="auth-form" data-auth-form novalidate>
-          <div class="field" data-field="name" hidden>
-            <label>Full name</label>
-            <input type="text" name="name" autocomplete="name" placeholder="Your name" />
-            <p class="field__err" data-err="name"></p>
+        <div class="modal-body">
+          <div class="d-grid gap-2 mb-3" data-modal-providers>
+            <div class="skeleton-v5" style="height:44px;"></div>
           </div>
-          <div class="field">
-            <label>Email address</label>
-            <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required />
-            <p class="field__err" data-err="email"></p>
+          <div class="text-center text-muted small mb-3" data-auth-divider>
+            <span class="bg-body px-2 position-relative" style="z-index:1;">or with email</span>
+            <hr class="position-relative" style="margin-top:-10px;z-index:0;">
           </div>
-          <div class="field">
-            <label>Password</label>
-            <input type="password" name="password" autocomplete="current-password" placeholder="At least 8 characters" required />
-            <p class="field__err" data-err="password"></p>
-          </div>
-          <div class="field" data-field="mobile" hidden>
-            <label>Mobile <span class="muted">(optional)</span></label>
-            <input type="tel" name="mobile" autocomplete="tel" placeholder="01XXXXXXXXX" />
-            <p class="field__err" data-err="mobile"></p>
-          </div>
-          <button type="submit" class="btn btn--primary btn--block" data-auth-submit>Sign in</button>
-          <p class="auth-switch">
-            <span data-switch-text>New here?</span>
-            <button type="button" class="link-btn" data-switch>Create an account</button>
-          </p>
-          <p class="auth-switch" data-forgot-row>
-            <button type="button" class="link-btn" data-forgot>Forgot your password?</button>
-          </p>
-        </form>
+          <form data-auth-form novalidate>
+            <div class="mb-3" data-field="name" hidden>
+              <label class="form-label small fw-semibold">Full name</label>
+              <input type="text" class="form-control" name="name" autocomplete="name" placeholder="Your name">
+              <div class="invalid-feedback" data-err="name"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Email address</label>
+              <input type="email" class="form-control" name="email" autocomplete="email" placeholder="you@example.com" required>
+              <div class="invalid-feedback" data-err="email"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Password</label>
+              <input type="password" class="form-control" name="password" autocomplete="current-password" placeholder="At least 8 characters" required>
+              <div class="invalid-feedback" data-err="password"></div>
+            </div>
+            <div class="mb-3" data-field="mobile" hidden>
+              <label class="form-label small fw-semibold">Mobile <span class="text-muted">(optional)</span></label>
+              <input type="tel" class="form-control" name="mobile" autocomplete="tel" placeholder="01XXXXXXXXX">
+            </div>
+            <button type="submit" class="btn btn-primary w-100" data-auth-submit>Sign in</button>
+            <div class="text-center mt-3 small">
+              <span data-switch-text>New here?</span>
+              <button type="button" class="btn btn-link btn-sm p-0" data-switch>Create an account</button>
+            </div>
+            <div class="text-center mt-2 small" data-forgot-row>
+              <button type="button" class="btn btn-link btn-sm p-0 text-muted" data-forgot>Forgot password?</button>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer border-0 pt-0 justify-content-center">
+          <small class="text-muted">By continuing you agree to our <a href="/terms.php">terms</a> and <a href="/privacy.php">privacy policy</a>.</small>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  _authModal = div;
 
-        <p class="modal__legal">By continuing you agree to our <a href="/terms.php">terms</a> and <a href="/privacy.php">privacy policy</a>.</p>
-      </div>`;
-    wrap.addEventListener('click', (e) => { if (e.target === wrap) closeAuthModal(); });
-    wrap.querySelector('.modal__close').addEventListener('click', () => closeAuthModal());
-    wrap.querySelectorAll('[data-tab]').forEach((t) => {
-      t.addEventListener('click', () => setAuthMode(t.getAttribute('data-tab')));
-    });
-    wrap.querySelector('[data-switch]').addEventListener('click', () => {
-      setAuthMode(_modalMode === 'signin' ? 'signup' : 'signin');
-    });
-    wrap.querySelector('[data-forgot]').addEventListener('click', onForgotClick);
-    wrap.querySelector('[data-auth-form]').addEventListener('submit', onAuthSubmit);
-    document.body.appendChild(wrap);
-    _modalEl = wrap;
-    return wrap;
+  // Wire events
+  div.querySelector('[data-switch]').addEventListener('click', () => {
+    setAuthMode(_modalMode === 'signin' ? 'signup' : 'signin');
+  });
+  div.querySelector('[data-forgot]').addEventListener('click', onForgotClick);
+  div.querySelector('[data-auth-form]').addEventListener('submit', onAuthSubmit);
+
+  _authModalInstance = new bootstrap.Modal(div);
+  return div;
+}
+
+
+function setAuthMode(mode) {
+  _modalMode = mode === 'signup' ? 'signup' : 'signin';
+  if (!_authModal) return;
+  const title = _authModal.querySelector('[data-modal-title]');
+  const sub = _authModal.querySelector('[data-modal-sub]');
+  const nameF = _authModal.querySelector('[data-field="name"]');
+  const mobF = _authModal.querySelector('[data-field="mobile"]');
+  const submit = _authModal.querySelector('[data-auth-submit]');
+  const swT = _authModal.querySelector('[data-switch-text]');
+  const swB = _authModal.querySelector('[data-switch]');
+  const fRow = _authModal.querySelector('[data-forgot-row]');
+
+  if (_modalMode === 'signup') {
+    title.textContent = 'Create your account';
+    sub.textContent = 'Free forever — no credit card needed.';
+    nameF.hidden = false; mobF.hidden = false;
+    submit.textContent = 'Create account';
+    swT.textContent = 'Already have an account?';
+    swB.textContent = 'Sign in instead';
+    if (fRow) fRow.hidden = true;
+  } else {
+    title.textContent = 'Welcome back';
+    sub.textContent = 'Sign in to manage your subdomains.';
+    nameF.hidden = true; mobF.hidden = true;
+    submit.textContent = 'Sign in';
+    swT.textContent = 'New here?';
+    swB.textContent = 'Create an account';
+    if (fRow) fRow.hidden = false;
   }
+  // Clear errors
+  _authModal.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+  _authModal.querySelectorAll('[data-err]').forEach(el => { el.textContent = ''; });
+}
 
-  function setAuthMode(mode) {
-    _modalMode = mode === 'signup' ? 'signup' : 'signin';
-    if (!_modalEl) return;
-    _modalEl.querySelectorAll('[data-tab]').forEach((t) => {
-      t.classList.toggle('active', t.getAttribute('data-tab') === _modalMode);
-    });
-    const title = _modalEl.querySelector('[data-modal-title]');
-    const sub   = _modalEl.querySelector('[data-modal-sub]');
-    const nameF = _modalEl.querySelector('[data-field="name"]');
-    const mobF  = _modalEl.querySelector('[data-field="mobile"]');
-    const pwdIn = _modalEl.querySelector('input[name="password"]');
-    const submit= _modalEl.querySelector('[data-auth-submit]');
-    const swT   = _modalEl.querySelector('[data-switch-text]');
-    const swB   = _modalEl.querySelector('[data-switch]');
-    const fRow  = _modalEl.querySelector('[data-forgot-row]');
-    if (_modalMode === 'signup') {
-      title.textContent = 'Create your account';
-      sub.textContent = 'Free forever — no credit card needed.';
-      nameF.hidden = false; mobF.hidden = false;
-      pwdIn.setAttribute('autocomplete', 'new-password');
-      pwdIn.placeholder = 'At least 8 characters';
-      submit.textContent = 'Create account';
-      swT.textContent = 'Already have an account?';
-      swB.textContent = 'Sign in instead';
-      if (fRow) fRow.hidden = true;
+async function onForgotClick() {
+  if (!_authModal) return;
+  const form = _authModal.querySelector('[data-auth-form]');
+  const emailInp = form.querySelector('input[name="email"]');
+  const email = (emailInp?.value || '').trim().toLowerCase();
+  if (!email || !/.+@.+\..+/.test(email)) {
+    emailInp.classList.add('is-invalid');
+    const err = form.querySelector('[data-err="email"]');
+    if (err) err.textContent = 'Enter your email first, then click "Forgot password".';
+    emailInp?.focus();
+    return;
+  }
+  try {
+    const r = await api('/auth/forgot-password', { method: 'POST', body: { email } });
+    if (r?.reset_url) {
+      toast('Demo mode — opening reset link.', 'success');
+      window.open(r.reset_url, '_blank', 'noopener');
     } else {
-      title.textContent = 'Welcome back';
-      sub.textContent = 'Sign in to claim or manage your free subdomain.';
-      nameF.hidden = true; mobF.hidden = true;
-      pwdIn.setAttribute('autocomplete', 'current-password');
-      pwdIn.placeholder = 'Your password';
-      submit.textContent = 'Sign in';
-      swT.textContent = 'New here?';
-      swB.textContent = 'Create an account';
-      if (fRow) fRow.hidden = false;
+      toast('If an account exists, a reset link has been sent.', 'success');
     }
-    // Clear any previous error/success state.
-    _modalEl.querySelectorAll('[data-err]').forEach((e) => { e.textContent = ''; });
-    _modalEl.querySelectorAll('.field').forEach((f) => f.classList.remove('field--error'));
+  } catch (e) {
+    toast(e?.detail || 'Could not send reset link.', 'error');
   }
+}
 
-  /**
-   * v3.0 — "Forgot password" handler. Posts the email from the modal to
-   * /api/auth/forgot-password and shows feedback. In demo mode the API
-   * returns a `dev_token` + `reset_url`; we surface the link so admins can
-   * test without an SMTP gateway.
-   */
-  async function onForgotClick() {
-    if (!_modalEl) return;
-    const form = _modalEl.querySelector('[data-auth-form]');
-    const emailInp = form.querySelector('input[name="email"]');
-    const errEl = form.querySelector('[data-err="email"]');
-    const email = (emailInp && emailInp.value || '').trim().toLowerCase();
-    if (!email || !/.+@.+\..+/.test(email)) {
-      if (errEl) errEl.textContent = 'Enter your account email above first, then click "Forgot password".';
-      const f = errEl && errEl.closest('.field');
-      if (f) f.classList.add('field--error');
-      if (emailInp) emailInp.focus();
-      return;
+async function onAuthSubmit(ev) {
+  ev.preventDefault();
+  const form = ev.currentTarget;
+  const submit = form.querySelector('[data-auth-submit]');
+  const data = Object.fromEntries(new FormData(form).entries());
+  form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+  form.querySelectorAll('[data-err]').forEach(el => { el.textContent = ''; });
+  submit.disabled = true;
+  const origLabel = submit.textContent;
+  submit.textContent = _modalMode === 'signup' ? 'Creating...' : 'Signing in...';
+  try {
+    const path = _modalMode === 'signup' ? '/auth/register' : '/auth/login';
+    const body = _modalMode === 'signup'
+      ? { name: data.name || '', email: data.email || '', password: data.password || '', mobile: data.mobile || '' }
+      : { email: data.email || '', password: data.password || '' };
+    const r = await api(path, { method: 'POST', body });
+    if (r?.token) {
+      setSession(r.token, r.user);
+      closeAuthModal();
+      toast(_modalMode === 'signup' ? 'Account created!' : 'Signed in.', 'success');
+      if (typeof window.__onAuthSuccess === 'function') window.__onAuthSuccess(r.user);
+      else setTimeout(() => location.reload(), 300);
     }
-    if (errEl) errEl.textContent = '';
-    const f = errEl && errEl.closest('.field');
-    if (f) f.classList.remove('field--error');
-
-    const btn = _modalEl.querySelector('[data-forgot]');
-    const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Sending…';
-    try {
-      const r = await api('/auth/forgot-password', { method: 'POST', body: { email } });
-      if (r && r.reset_url) {
-        // Demo-mode: show the link directly so the admin can complete the
-        // flow without configuring email.
-        toast('Demo mode — opening reset link in a new tab.', 'success');
-        window.open(r.reset_url, '_blank', 'noopener');
-      } else {
-        toast('If an account exists for that email, a reset link has been sent.', 'success');
-      }
-    } catch (e) {
-      toast((e && e.detail) || 'Could not send reset link.', 'error');
-    } finally {
-      btn.disabled = false; btn.textContent = orig;
+  } catch (e) {
+    const errs = e?.errors || {};
+    let any = false;
+    for (const [k, v] of Object.entries(errs)) {
+      const inp = form.querySelector(`input[name="${k}"]`);
+      const err = form.querySelector(`[data-err="${k}"]`);
+      if (inp) inp.classList.add('is-invalid');
+      if (err) { err.textContent = v; any = true; }
     }
+    if (!any) toast(e?.detail || 'Sign-in failed.', 'error');
+  } finally {
+    submit.disabled = false;
+    submit.textContent = origLabel;
   }
+}
 
-  async function onAuthSubmit(ev) {
-    ev.preventDefault();
-    const form = ev.currentTarget;
-    const submit = form.querySelector('[data-auth-submit]');
-    const data = Object.fromEntries(new FormData(form).entries());
-    form.querySelectorAll('[data-err]').forEach((e) => { e.textContent = ''; });
-    form.querySelectorAll('.field').forEach((f) => f.classList.remove('field--error'));
-    submit.disabled = true;
-    const origLabel = submit.textContent;
-    submit.textContent = _modalMode === 'signup' ? 'Creating…' : 'Signing in…';
-    try {
-      const path = _modalMode === 'signup' ? '/auth/register' : '/auth/login';
-      const body = _modalMode === 'signup'
-        ? { name: data.name || '', email: data.email || '', password: data.password || '', mobile: data.mobile || '' }
-        : { email: data.email || '', password: data.password || '' };
-      const r = await api(path, { method: 'POST', body });
-      if (r && r.token) {
-        setSession(r.token, r.user);
-        closeAuthModal();
-        toast(_modalMode === 'signup' ? 'Account created — welcome!' : 'Signed in.', 'success');
-        // If the page declared a post-auth callback, call it; otherwise reload.
-        if (typeof window.__onAuthSuccess === 'function') {
-          window.__onAuthSuccess(r.user);
-        } else {
-          setTimeout(() => location.reload(), 250);
-        }
-      }
-    } catch (e) {
-      const errs = (e && e.errors) || {};
-      let any = false;
-      Object.keys(errs).forEach((k) => {
-        const err = form.querySelector('[data-err="' + k + '"]');
-        const field = err && err.closest('.field');
-        if (err) { err.textContent = errs[k]; any = true; }
-        if (field) field.classList.add('field--error');
-      });
-      if (!any) {
-        toast((e && e.detail) || 'Sign-in failed. Please try again.', 'error');
-      }
-    } finally {
-      submit.disabled = false;
-      submit.textContent = origLabel;
-    }
-  }
 
-  async function openAuthModal(opts) {
-    opts = opts || {};
-    const el = ensureModalEl();
+async function openAuthModal(opts = {}) {
+  createAuthModal();
+  const mode = opts.mode === 'signup' ? 'signup' : 'signin';
+  setAuthMode(mode);
+  _authModalInstance.show();
 
-    // v3.3 — honor the admin "allow manual email sign-up" toggle. We need
-    // to know whether registration is allowed before deciding which tab
-    // to start on, so peek at settings synchronously from cache when we
-    // can; otherwise just show "sign in" and we'll re-render once
-    // settings arrive below.
-    let regAllowed = true;
-    if (_settingsCache && _settingsCache.auth) {
-      regAllowed = _settingsCache.auth.email_registration_enabled !== false;
-    }
-    const requestedMode = opts.mode === 'signup' ? 'signup' : 'signin';
-    setAuthMode(regAllowed ? requestedMode : 'signin');
-    applyEmailRegToggle(regAllowed);
-    if (opts.title) el.querySelector('[data-modal-title]').textContent = opts.title;
-    if (opts.sub)   el.querySelector('[data-modal-sub]').textContent = opts.sub;
-    el.classList.add('open');
+  // Load OAuth providers
+  const providersHost = _authModal.querySelector('[data-modal-providers]');
+  const divider = _authModal.querySelector('[data-auth-divider]');
+  providersHost.innerHTML = '<div class="skeleton-v5" style="height:44px;border-radius:8px;"></div>';
 
-    const providersHost = el.querySelector('[data-modal-providers]');
-    const divider = el.querySelector('[data-auth-divider]');
-    providersHost.innerHTML = '<div class="skeleton" style="height:44px;border-radius:10px;"></div>';
+  let s;
+  try { s = await getSettings(); } catch { providersHost.innerHTML = ''; divider.hidden = true; return; }
 
-    let s;
-    try { s = await getSettings(); }
-    catch (e) {
-      providersHost.innerHTML = '';
-      divider.hidden = true;
-      return;
-    }
+  const providers = s?.auth?.oauth_providers || [];
+  providersHost.innerHTML = '';
+  if (!providers.length) { divider.hidden = true; return; }
+  divider.hidden = false;
 
-    // Re-apply the registration toggle now that we have authoritative
-    // settings (the synchronous peek may have used a stale cache).
-    const allowReg = !(s.auth && s.auth.email_registration_enabled === false);
-    applyEmailRegToggle(allowReg);
-    if (!allowReg && _modalMode === 'signup') setAuthMode('signin');
+  const next = opts.next || (location.pathname + location.search);
+  providers.forEach(p => {
+    const a = document.createElement('a');
+    a.className = 'oauth-btn';
+    a.href = `/api/auth/oauth/${p.id}/start?next=${encodeURIComponent(next)}`;
+    a.innerHTML = `<img src="/assets/img/${p.id}.svg" alt=""><span>Continue with ${escapeHtml(p.label)}</span>`;
+    providersHost.appendChild(a);
+  });
+}
 
-    const providers = (s.auth && s.auth.oauth_providers) || [];
-    providersHost.innerHTML = '';
-    if (!providers.length) {
-      divider.hidden = true;
-      return;
-    }
-    divider.hidden = false;
-    const next = opts.next || (location.pathname + location.search);
-    providers.forEach((p) => {
-      const a = document.createElement('a');
-      a.className = 'oauth-btn oauth-btn--' + p.id;
-      a.href = '/api/auth/oauth/' + p.id + '/start?next=' + encodeURIComponent(next);
-      const ico = document.createElement('img');
-      ico.src = '/assets/img/' + p.id + '.svg'; ico.alt = '';
-      const text = document.createElement('span');
-      text.textContent = 'Continue with ' + p.label;
-      a.appendChild(ico); a.appendChild(text);
-      providersHost.appendChild(a);
+function closeAuthModal() {
+  _authModalInstance?.hide();
+}
+
+function requireAuth(opts) {
+  if (isAuthed()) return Promise.resolve(getUser());
+  openAuthModal(opts);
+  return Promise.reject({ detail: 'Sign-in required' });
+}
+
+// ─── Toast Notifications ─────────────────────────────────────────────────────
+
+function toast(message, type = 'info') {
+  const host = document.getElementById('toastHost') || document.body;
+  const el = document.createElement('div');
+  const bgClass = type === 'success' ? 'bg-success' : type === 'error' ? 'bg-danger' : 'bg-dark';
+  el.className = `toast show align-items-center text-white ${bgClass} border-0`;
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${escapeHtml(message)}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>`;
+  host.appendChild(el);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 4000);
+}
+
+// ─── WhatsApp Float ──────────────────────────────────────────────────────────
+
+async function injectWhatsAppFloat() {
+  try {
+    const s = await getSettings();
+    const url = s?.whatsapp?.support_url;
+    if (!url || document.querySelector('.wa-float')) return;
+    const a = document.createElement('a');
+    a.className = 'wa-float';
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.title = 'Chat on WhatsApp';
+    a.innerHTML = '<img src="/assets/img/whatsapp.svg" alt="WhatsApp">';
+    document.body.appendChild(a);
+  } catch {}
+}
+
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str ?? '';
+  return d.innerHTML;
+}
+
+function debounce(fn, ms = 250) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+function initialsOf(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return (parts[0]?.[0] || '').toUpperCase() + (parts[1]?.[0] || '').toUpperCase() || name[0].toUpperCase();
+}
+
+// ─── Navbar Scroll Effect ────────────────────────────────────────────────────
+
+function wireNavScroll() {
+  const nav = document.querySelector('.navbar-v5');
+  if (!nav) return;
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 10);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+}
+
+// ─── Boot ────────────────────────────────────────────────────────────────────
+
+function boot() {
+  // Theme
+  applyTheme(currentTheme());
+  document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+    btn.addEventListener('click', toggleTheme);
+  });
+
+  // Nav
+  wireNavScroll();
+  renderUserChip();
+
+  // Wire all [data-open-auth] buttons
+  document.querySelectorAll('[data-open-auth]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const mode = btn.getAttribute('data-mode') || 'signin';
+      openAuthModal({ mode });
     });
-  }
+  });
 
-  function closeAuthModal() {
-    if (_modalEl) _modalEl.classList.remove('open');
-  }
-
-  /**
-   * v3.3 — when the admin disables "Allow manual email sign-up" we hide
-   * the Create-account tab and the in-form switcher inside the modal,
-   * and reword the legend so visitors aren't confused. Sign-in still
-   * works exactly as before.
-   */
-  function applyEmailRegToggle(allowed) {
-    if (!_modalEl) return;
-    const tabSignup = _modalEl.querySelector('[data-tab="signup"]');
-    const tabSignin = _modalEl.querySelector('[data-tab="signin"]');
-    const switchRow = _modalEl.querySelector('[data-switch]');
-    if (tabSignup) tabSignup.hidden = !allowed;
-    if (tabSignin) tabSignin.hidden = !allowed && false; // always show sign-in
-    if (switchRow) switchRow.hidden = !allowed;
-    // If signup is gone, the tab row only has one item — drop it altogether
-    // so the modal looks intentional rather than empty.
-    const tabsRow = _modalEl.querySelector('.auth-tabs');
-    if (tabsRow) tabsRow.style.display = allowed ? '' : 'none';
-    if (!allowed) {
-      const sub = _modalEl.querySelector('[data-modal-sub]');
-      if (sub && _modalMode === 'signin') {
-        sub.textContent = 'Sign in to claim or manage your free subdomain. New accounts via Google / Facebook / GitHub.';
-      }
-    }
-  }
-
-  /**
-   * v3.3 — also gate the page-level "Create account" CTAs (the hero
-   * sign-in row, the final-CTA band, the dashboard's needs-auth card).
-   * Anything carrying `data-mode="signup"` gets hidden when the admin
-   * has turned off manual registration.
-   */
-  function applyEmailRegPageGates(allowed) {
-    document.querySelectorAll('[data-open-auth][data-mode="signup"]').forEach((el) => {
-      el.hidden = !allowed;
+  // Sign-out buttons
+  document.querySelectorAll('[data-signout]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      clearSession();
+      location.href = '/';
     });
-  }
+  });
 
-  function requireAuth(opts) {
-    if (isAuthed()) return Promise.resolve(getUser());
-    openAuthModal(opts);
-    return Promise.reject({ detail: 'Sign-in required' });
-  }
+  // Footer year
+  document.querySelectorAll('[data-year]').forEach(el => {
+    el.textContent = new Date().getFullYear();
+  });
 
-  /* ---------------------------------------------------------------- */
-  /*  WhatsApp float + nav                                              */
-  /* ---------------------------------------------------------------- */
-  async function injectWhatsAppFloat() {
-    try {
-      const s = await getSettings();
-      const url = s.whatsapp && s.whatsapp.support_url;
-      if (!url) return;
-      if (document.querySelector('.wa-float')) return;
-      const a = document.createElement('a');
-      a.className = 'wa-float';
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.title = 'Chat with us on WhatsApp';
-      a.innerHTML = '<img src="/assets/img/whatsapp.svg" alt="WhatsApp" />';
-      document.body.appendChild(a);
-    } catch (e) { /* ignore */ }
-  }
+  // WhatsApp float
+  injectWhatsAppFloat();
 
-  function wireNav() {
-    renderUserChip();
-    const toggle = document.querySelector('[data-nav-toggle]');
-    const mobile = document.querySelector('[data-nav-mobile]');
-    if (toggle && mobile) {
-      // v4.5 — augment the mobile drawer with sign-in / dashboard / sign-out
-      // controls so authenticated actions are reachable from inside the
-      // hamburger too (in addition to the always-visible icon buttons).
-      _augmentMobileDrawer(mobile);
-      toggle.addEventListener('click', () => {
-        mobile.classList.toggle('open');
-        const open = mobile.classList.contains('open');
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      });
-      // Auto-close the mobile menu when the user picks a link or hits Esc.
-      mobile.querySelectorAll('a').forEach((a) => {
-        a.addEventListener('click', () => mobile.classList.remove('open'));
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && mobile.classList.contains('open')) {
-          mobile.classList.remove('open');
-          toggle.setAttribute('aria-expanded', 'false');
-        }
-      });
-      // Close drawer if viewport widens past the desktop breakpoint while
-      // it's open (avoids leftover overlay state on rotation).
-      const mq = window.matchMedia('(min-width: 960px)');
-      const onMq = () => { if (mq.matches) mobile.classList.remove('open'); };
-      if (mq.addEventListener) mq.addEventListener('change', onMq);
-      else if (mq.addListener) mq.addListener(onMq);
-    }
-    document.querySelectorAll('[data-open-auth]').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.preventDefault();
-        const mode = el.getAttribute('data-mode') || 'signin';
-        openAuthModal({ mode });
-      });
+  // WhatsApp links from settings
+  getSettings().then(s => {
+    const wa = s?.whatsapp || {};
+    document.querySelectorAll('[data-wa-cta], [data-wa-footer-link]').forEach(el => {
+      if (wa.community_url) el.href = wa.community_url;
     });
-    document.querySelectorAll('[data-signout]').forEach((el) => {
-      el.addEventListener('click', (e) => { e.preventDefault(); clearSession(); location.href = '/'; });
+    document.querySelectorAll('[data-wa-footer-support]').forEach(el => {
+      if (wa.support_url) el.href = wa.support_url;
     });
-
-    // Sticky nav: add a subtle shadow once the user scrolls past the hero.
-    const nav = document.querySelector('.nav');
-    if (nav) {
-      let raf = null;
-      const update = () => {
-        nav.classList.toggle('nav--scrolled', window.scrollY > 12);
-        raf = null;
-      };
-      window.addEventListener('scroll', () => {
-        if (raf == null) raf = requestAnimationFrame(update);
-      }, { passive: true });
-      update();
+    if (wa.community_title) {
+      document.querySelectorAll('[data-wa-title]').forEach(el => { el.textContent = wa.community_title; });
     }
-  }
-
-  /** v4.5 — append auth-aware items to the mobile hamburger drawer. */
-  function _augmentMobileDrawer(mobile) {
-    if (mobile.dataset.augmented === '1') return;
-    mobile.dataset.augmented = '1';
-    const div = document.createElement('div');
-    div.className = 'nav__mobile-divider';
-    mobile.appendChild(div);
-    const guestSignIn = document.createElement('a');
-    guestSignIn.href = '#';
-    guestSignIn.setAttribute('data-open-auth', '');
-    guestSignIn.setAttribute('data-guest-only', '');
-    guestSignIn.textContent = 'Sign in';
-    mobile.appendChild(guestSignIn);
-    const guestSignUp = document.createElement('a');
-    guestSignUp.href = '#';
-    guestSignUp.setAttribute('data-open-auth', '');
-    guestSignUp.setAttribute('data-mode', 'signup');
-    guestSignUp.setAttribute('data-guest-only', '');
-    guestSignUp.textContent = 'Create account';
-    mobile.appendChild(guestSignUp);
-    const dash = document.createElement('a');
-    dash.href = '/dashboard.php';
-    dash.setAttribute('data-auth-only', '');
-    dash.hidden = true;
-    dash.textContent = 'My dashboard';
-    mobile.appendChild(dash);
-    const adm = document.createElement('a');
-    adm.href = '/admin.php';
-    adm.setAttribute('data-admin-only', '');
-    adm.hidden = true;
-    adm.textContent = 'Admin console';
-    mobile.appendChild(adm);
-    const out = document.createElement('button');
-    out.type = 'button';
-    out.className = 'nav__mobile-signout';
-    out.setAttribute('data-auth-only', '');
-    out.setAttribute('data-signout', '');
-    out.hidden = true;
-    out.textContent = 'Sign out';
-    mobile.appendChild(out);
-  }
-
-  /* ---------------------------------------------------------------- */
-  /*  Toasts                                                            */
-  /* ---------------------------------------------------------------- */
-  function toast(msg, kind = '') {
-    let host = document.querySelector('.toast-host');
-    if (!host) {
-      host = document.createElement('div');
-      host.className = 'toast-host';
-      document.body.appendChild(host);
+    if (wa.community_subtitle) {
+      document.querySelectorAll('[data-wa-sub]').forEach(el => { el.textContent = wa.community_subtitle; });
     }
-    const t = document.createElement('div');
-    t.className = 'toast ' + kind;
-    t.textContent = msg;
-    host.appendChild(t);
-    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .25s'; }, 3500);
-    setTimeout(() => { t.remove(); }, 3900);
-  }
+  }).catch(() => {});
+}
 
-  /* ---------------------------------------------------------------- */
-  /*  Util                                                              */
-  /* ---------------------------------------------------------------- */
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-  function initialsOf(name) {
-    return (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  }
-  function fmtDate(s) {
-    if (!s) return '';
-    const d = new Date(s.replace(' ', 'T'));
-    if (isNaN(d.getTime())) return s;
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  }
-  function debounce(fn, ms) {
-    let t = null;
-    return function () {
-      clearTimeout(t);
-      const args = arguments;
-      t = setTimeout(() => fn.apply(null, args), ms);
-    };
-  }
+// Run boot on DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
 
-  /* ---------------------------------------------------------------- */
-  /*  Boot                                                              */
-  /* ---------------------------------------------------------------- */
-  /* ---------------------------------------------------------------- */
-  /*  v4.5 — scroll-reveal for sections + dynamic instant-feel UX.     */
-  /*                                                                  */
-  /*  Adds a subtle fade-up animation to public-page sections as they  */
-  /*  enter the viewport (IntersectionObserver, no timer polling).    */
-  /*  Skipped on dashboard / admin shells where instant pane switches  */
-  /*  matter more than scroll choreography. Honors prefers-reduced-   */
-  /*  motion automatically via the .reveal CSS rule.                  */
-  /* ---------------------------------------------------------------- */
-  function wireScrollReveal() {
-    if (document.querySelector('.dash-shell')) return; // dashboards stay snappy
-    if (!('IntersectionObserver' in window)) return;
-    const targets = document.querySelectorAll(
-      'section, .pro-card, .brand-card, .feature, .step, .stat-tile, .dir-card, .faq, .wa-band, .footer'
-    );
-    if (!targets.length) return;
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) {
-          e.target.classList.add('reveal', 'is-visible');
-          io.unobserve(e.target);
-        }
-      });
-    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
-    targets.forEach((t) => {
-      // Skip the very first hero so the page doesn't fade in on landing.
-      if (t.classList.contains('hero') || t.classList.contains('hero--center')) {
-        t.classList.add('reveal', 'is-visible');
-        return;
-      }
-      t.classList.add('reveal');
-      io.observe(t);
-    });
-  }
 
-  function boot() {
-    wireNav();
-    injectWhatsAppFloat();
-    wireScrollReveal();
-    // v3.3 — fetch settings once on boot so we can hide the "Create account"
-    // CTAs across the page when the admin disables manual registration.
-    // v4.5 — also applies the admin-controlled brand color in case the
-    // server-emitted inline <style> wasn't available on older deploys.
-    getSettings().then((s) => {
-      const allowReg = !(s && s.auth && s.auth.email_registration_enabled === false);
-      applyEmailRegPageGates(allowReg);
-      if (s && s.theme && s.theme.primary) {
-        applyBrandTheme(s.theme.primary, s.theme.primary_dark || '');
-      }
-    }).catch(() => { /* keep CTAs visible on settings error */ });
-    if (isAuthed()) {
-      // refresh user in background
-      api('/auth/me').then((r) => {
-        if (r && r.user) setSession(null, r.user);
-      }).catch((e) => {
-        if (e && e.status === 401) { clearSession(); }
-      });
-    }
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else { boot(); }
+// ─── Export as window.App (for page-specific scripts) ────────────────────────
 
-  /* ---------------------------------------------------------------- */
-  /*  Public API                                                        */
-  /* ---------------------------------------------------------------- */
-  window.App = {
-    api, qs,
-    getToken, getUser, setSession, clearSession, isAuthed, isAdmin,
-    applyVisibilityGates,
-    getSettings,
-    openAuthModal, closeAuthModal, requireAuth,
-    toast, escapeHtml, initialsOf, fmtDate, debounce,
-    // v4.5 — admin-controllable brand color, applied live after save.
-    applyBrandTheme,
-  };
-})();
+window.App = Object.freeze({
+  api,
+  qs,
+  getToken,
+  getUser,
+  setSession,
+  clearSession,
+  isAuthed,
+  isAdmin,
+  getSettings,
+  openAuthModal,
+  closeAuthModal,
+  requireAuth,
+  toast,
+  escapeHtml,
+  debounce,
+  fmtDate,
+  initialsOf,
+  applyBrandTheme,
+  applyTheme,
+  currentTheme,
+});

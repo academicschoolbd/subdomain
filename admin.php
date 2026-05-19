@@ -1,257 +1,247 @@
-<?php try { require_once __DIR__ . '/api/bootstrap.php'; } catch (Throwable $_e) { /* DB unavailable — page still renders, JS surfaces the error */ } if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style($c=null){} } ?>
+<?php
+try { require_once __DIR__ . '/api/bootstrap.php'; } catch (Throwable $_e) {}
+if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style($c=null){} }
+?>
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
-  <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg" />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Admin console — institution.bd</title>
-  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/css/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Admin Console — institution.bd</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/style.css">
   <?php theme_emit_head_style($CONFIG ?? null); ?>
 </head>
 <body>
 
-<!-- ============================ NAV ============================ -->
-<nav class="nav">
-  <div class="container nav__inner">
-    <a class="nav__brand" href="/">
-      <img src="/assets/img/logo.svg" alt="" />
-      <span class="nav__brand-text"><span>institution.bd</span><small>Admin console</small></span>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="navbar navbar-expand-lg navbar-v5 sticky-top">
+  <div class="container-fluid px-3 px-lg-4">
+    <a class="navbar-brand" href="/">
+      <img src="/assets/img/logo.svg" alt="institution.bd">
+      <span>
+        <span>institution.bd</span>
+        <span class="brand-sub">Admin Console</span>
+      </span>
     </a>
-    <div class="nav__links">
-      <a href="/">Home</a>
-      <a href="/directory.php">Directory</a>
-      <a href="/dashboard.php">My dashboard</a>
-      <a href="/admin.php" class="active">Admin</a>
-    </div>
-    <div class="nav__cta">
+    <div class="d-flex align-items-center gap-2 order-lg-3">
+      <button class="btn-theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme">
+        <i class="bi bi-moon-stars-fill"></i>
+      </button>
       <span data-user-chip></span>
-      <button class="nav__toggle" data-nav-toggle aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+      <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#adminNav" aria-label="Menu">
+        <span class="navbar-toggler-icon"></span>
       </button>
     </div>
-  </div>
-  <div class="container nav__mobile" data-nav-mobile>
-    <a href="/">Home</a><a href="/directory.php">Directory</a><a href="/dashboard.php">My dashboard</a><a href="/admin.php">Admin</a>
+    <div class="collapse navbar-collapse order-lg-2" id="adminNav">
+      <ul class="navbar-nav mx-auto gap-1">
+        <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house me-1"></i> Home</a></li>
+        <li class="nav-item"><a class="nav-link" href="/directory.php"><i class="bi bi-grid me-1"></i> Directory</a></li>
+        <li class="nav-item"><a class="nav-link" href="/dashboard.php"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link active" href="/admin.php"><i class="bi bi-shield-lock me-1"></i> Admin</a></li>
+      </ul>
+    </div>
   </div>
 </nav>
 
-<!-- ============================ NEEDS AUTH ============================ -->
-<section class="dash-shell" data-needs-auth hidden>
+<!-- ===== NEEDS AUTH ===== -->
+<section class="py-5" data-needs-auth hidden>
   <div class="container">
-    <div class="card">
+    <div class="card border-0 shadow-sm text-center p-5" style="max-width:480px;margin:0 auto;">
+      <div class="mb-3"><i class="bi bi-shield-lock-fill fs-1 text-muted"></i></div>
       <h3>Admin only</h3>
       <p class="text-muted">Sign in with an admin account to access the moderation console.</p>
-      <button class="btn btn--primary" data-open-auth>Sign in</button>
+      <button class="btn btn-primary" data-open-auth><i class="bi bi-box-arrow-in-right me-2"></i> Sign in</button>
     </div>
   </div>
 </section>
 
-<!-- ============================ NOT ADMIN ============================ -->
-<section class="dash-shell" data-not-admin hidden>
+<!-- ===== NOT ADMIN ===== -->
+<section class="py-5" data-not-admin hidden>
   <div class="container">
-    <div class="card">
+    <div class="card border-0 shadow-sm text-center p-5" style="max-width:480px;margin:0 auto;">
+      <div class="mb-3"><i class="bi bi-person-x-fill fs-1 text-warning"></i></div>
       <h3>Not an admin</h3>
-      <p class="text-muted">Your account is signed in but doesn't have admin permissions. Ask the platform administrator to promote your account.</p>
-      <a class="btn" href="/dashboard.php">Back to dashboard</a>
+      <p class="text-muted">Your account doesn't have admin permissions.</p>
+      <a class="btn btn-outline-primary" href="/dashboard.php"><i class="bi bi-arrow-left me-1"></i> Back to dashboard</a>
     </div>
   </div>
 </section>
 
-<!-- ============================ ADMIN SHELL ============================ -->
-<section class="dash-shell" data-admin-root hidden id="main">
-  <div class="container">
-    <div class="dash-grid">
 
-      <!-- =================== SIDEBAR =================== -->
-      <aside class="dash-sidebar" aria-label="Admin console navigation">
-        <header class="dash-sidebar__head">
-          <span class="dash-sidebar__crest" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </span>
-          <span>Admin console</span>
-        </header>
+<!-- ===== ADMIN SHELL ===== -->
+<div data-admin-root hidden id="main">
+  <div class="dash-layout">
 
-        <nav class="dash-nav">
-          <button class="dash-nav__item active" data-pane-btn="overview" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-            </span>
-            <span>Overview</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="queue" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7"/></svg>
-            </span>
-            <span>Approval queue</span>
-            <span class="dash-nav__count" data-nav-pending hidden>0</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="users" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </span>
-            <span>Users</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="reserved" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            </span>
-            <span>Reserved slugs</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="audit" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            </span>
-            <span>Audit log</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="exports" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </span>
-            <span>Exports</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="settings" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09c0 .67.39 1.27 1 1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82c.24.61.84 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </span>
-            <span>Platform settings</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="integrations" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            </span>
-            <span>Integrations</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="payments" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><line x1="2" y1="11" x2="22" y2="11"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
-            </span>
-            <span>Support payments</span>
-          </button>
-          <button class="dash-nav__item" data-pane-btn="renewals" type="button">
-            <span class="dash-nav__ico" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>
-            </span>
-            <span>Renewals</span>
-            <span class="dash-nav__count" data-renewals-pending hidden>0</span>
-          </button>
-        </nav>
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="dash-sidebar-v5">
+      <div class="sidebar-header">
+        <i class="bi bi-shield-fill text-primary"></i>
+        <span>Admin Console</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="dash-nav-item active" data-pane-btn="overview" type="button">
+          <i class="bi bi-grid-1x2-fill nav-icon"></i>
+          <span>Overview</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="queue" type="button">
+          <i class="bi bi-check2-square nav-icon"></i>
+          <span>Approval Queue</span>
+          <span class="nav-badge" data-nav-pending hidden>0</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="users" type="button">
+          <i class="bi bi-people-fill nav-icon"></i>
+          <span>Users</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="reserved" type="button">
+          <i class="bi bi-lock-fill nav-icon"></i>
+          <span>Reserved Slugs</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="audit" type="button">
+          <i class="bi bi-journal-text nav-icon"></i>
+          <span>Audit Log</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="exports" type="button">
+          <i class="bi bi-download nav-icon"></i>
+          <span>Exports</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="settings" type="button">
+          <i class="bi bi-sliders nav-icon"></i>
+          <span>Platform Settings</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="integrations" type="button">
+          <i class="bi bi-code-slash nav-icon"></i>
+          <span>Integrations</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="payments" type="button">
+          <i class="bi bi-credit-card-fill nav-icon"></i>
+          <span>Support Payments</span>
+        </button>
+        <button class="dash-nav-item" data-pane-btn="renewals" type="button">
+          <i class="bi bi-arrow-repeat nav-icon"></i>
+          <span>Renewals</span>
+          <span class="nav-badge" data-renewals-pending hidden>0</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <a class="btn btn-sm btn-outline-secondary w-100 mb-2" href="/dashboard.php">
+          <i class="bi bi-speedometer2 me-1"></i> My Dashboard
+        </a>
+        <button class="btn btn-sm btn-outline-danger w-100" data-signout type="button">
+          <i class="bi bi-box-arrow-left me-1"></i> Sign out
+        </button>
+      </div>
+    </aside>
 
-        <footer class="dash-sidebar__foot">
-          <a class="btn btn--ghost btn--sm" href="/dashboard.php">My dashboard</a>
-          <button class="btn btn--ghost btn--sm" data-signout type="button">Sign out</button>
-        </footer>
-      </aside>
 
-      <!-- =================== MAIN =================== -->
-      <main class="dash-main">
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="dash-content">
 
-        <!-- Approval-mode banner (top of every pane) -->
-        <section class="dash-banner dash-banner--admin" data-admin-banner>
-          <span class="dash-banner__ico" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </span>
-          <div class="dash-banner__body">
-            <h3 data-admin-banner-title>Moderation is ON — every claim waits for your approval.</h3>
-            <p data-admin-banner-sub>New subdomains land as <code>pending</code> and stay private until you approve them. You can flip moderation OFF in Platform settings to restore the v3.0 instant-claim flow.</p>
-          </div>
-          <div class="dash-banner__cta">
-            <button class="btn btn--primary" data-jump-pane="queue" type="button">Open queue</button>
-            <button class="btn" data-jump-pane="settings" type="button">Settings</button>
-          </div>
-        </section>
+      <!-- Admin Banner -->
+      <div class="admin-banner-v5 mb-4" data-admin-banner>
+        <div class="banner-icon"><i class="bi bi-shield-check"></i></div>
+        <div class="flex-grow-1">
+          <h6 class="mb-1" data-admin-banner-title>Moderation is ON — every claim waits for your approval.</h6>
+          <p class="text-muted small mb-0" data-admin-banner-sub>New subdomains land as <code>pending</code> and stay private until you approve them.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-primary btn-sm" data-jump-pane="queue" type="button">Open queue</button>
+          <button class="btn btn-outline-secondary btn-sm" data-jump-pane="settings" type="button">Settings</button>
+        </div>
+      </div>
 
-        <!-- =================== OVERVIEW PANE =================== -->
-        <section class="dash-pane" data-pane="overview">
-          <div class="quick-grid" data-kpi-host></div>
+      <!-- ===== OVERVIEW PANE ===== -->
+      <section data-pane="overview">
+        <!-- KPI Tiles -->
+        <div class="row g-3 mb-4" data-kpi-host></div>
 
-          <div class="grid-2 mt-3">
-            <div class="card dash-card">
-              <header class="dash-card__head">
+        <div class="row g-4">
+          <!-- Recent Activity -->
+          <div class="col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+              <div class="card-header bg-transparent border-bottom d-flex justify-content-between align-items-center py-3">
                 <div>
-                  <h2 class="dash-card__title">Recent activity</h2>
-                  <p class="dash-card__sub">The last 12 admin / owner actions.</p>
+                  <h6 class="mb-0"><i class="bi bi-activity me-2 text-primary"></i>Recent Activity</h6>
+                  <small class="text-muted">Last 12 admin/owner actions</small>
                 </div>
-                <button class="btn btn--sm" data-jump-pane="audit" type="button">Full audit log →</button>
-              </header>
-              <div class="activity-feed" data-activity-host>
-                <div class="skeleton" style="height:180px;"></div>
+                <button class="btn btn-sm btn-outline-primary" data-jump-pane="audit" type="button">Full log <i class="bi bi-arrow-right"></i></button>
+              </div>
+              <div class="card-body" data-activity-host>
+                <div class="skeleton-v5" style="height:180px;"></div>
               </div>
             </div>
+          </div>
 
-            <div class="card dash-card">
-              <header class="dash-card__head">
-                <div>
-                  <h2 class="dash-card__title">Quick actions</h2>
-                  <p class="dash-card__sub">Jump straight where you need to be.</p>
-                </div>
-              </header>
-              <div class="quick-actions">
-                <button class="quick-action" data-jump-pane="queue" type="button">
-                  <span class="quick-action__ico" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7"/></svg>
-                  </span>
+          <!-- Quick Actions -->
+          <div class="col-lg-5">
+            <div class="card border-0 shadow-sm h-100">
+              <div class="card-header bg-transparent border-bottom py-3">
+                <h6 class="mb-0"><i class="bi bi-lightning-fill me-2 text-warning"></i>Quick Actions</h6>
+                <small class="text-muted">Jump straight where you need to be</small>
+              </div>
+              <div class="card-body d-grid gap-2">
+                <button class="quick-action-v5" data-jump-pane="queue" type="button">
+                  <span class="qa-icon"><i class="bi bi-check2-square"></i></span>
                   Review pending claims
                 </button>
-                <button class="quick-action" data-jump-pane="users" type="button">
-                  <span class="quick-action__ico" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                  </span>
+                <button class="quick-action-v5" data-jump-pane="users" type="button">
+                  <span class="qa-icon"><i class="bi bi-people"></i></span>
                   Manage users / admins
                 </button>
-                <button class="quick-action" data-jump-pane="reserved" type="button">
-                  <span class="quick-action__ico" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  </span>
+                <button class="quick-action-v5" data-jump-pane="reserved" type="button">
+                  <span class="qa-icon"><i class="bi bi-lock"></i></span>
                   Reserve a slug
                 </button>
-                <button class="quick-action" data-jump-pane="integrations" type="button">
-                  <span class="quick-action__ico" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                  </span>
+                <button class="quick-action-v5" data-jump-pane="integrations" type="button">
+                  <span class="qa-icon"><i class="bi bi-code-slash"></i></span>
                   OAuth / Cloudflare keys
                 </button>
-                <a class="quick-action" href="/dashboard.php">
-                  <span class="quick-action__ico" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-                  </span>
+                <a class="quick-action-v5" href="/dashboard.php">
+                  <span class="qa-icon"><i class="bi bi-speedometer2"></i></span>
                   My owner dashboard
                 </a>
-                <a class="quick-action" href="/directory.php">
-                  <span class="quick-action__ico" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                  </span>
+                <a class="quick-action-v5" href="/directory.php">
+                  <span class="qa-icon"><i class="bi bi-globe2"></i></span>
                   Public directory
                 </a>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- =================== QUEUE PANE =================== -->
-        <section class="dash-pane" data-pane="queue" hidden>
-          <div class="card dash-card">
-            <header class="dash-card__head">
-              <div>
-                <h2 class="dash-card__title">Approval queue</h2>
-                <p class="dash-card__sub">Approve, request changes, reject or suspend institution claims. Bulk actions act on every checked row.</p>
+
+      <!-- ===== QUEUE PANE ===== -->
+      <section data-pane="queue" hidden>
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-transparent border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+            <div>
+              <h5 class="mb-1"><i class="bi bi-check2-square me-2 text-primary"></i>Approval Queue</h5>
+              <p class="text-muted small mb-0">Approve, request changes, reject or suspend claims.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-primary btn-sm" data-bulk-act="approve" type="button" disabled>Approve selected</button>
+              <button class="btn btn-outline-warning btn-sm" data-bulk-act="needs_info" type="button" disabled>Needs info</button>
+              <button class="btn btn-outline-danger btn-sm" data-bulk-act="reject" type="button" disabled>Reject</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <form class="row g-2 mb-3" data-queue-form>
+              <div class="col-md-8">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-transparent"><i class="bi bi-search"></i></span>
+                  <input type="text" class="form-control" placeholder="Search name, slug, EIIN..." data-q autocomplete="off">
+                </div>
               </div>
-              <div class="flex" style="gap:8px;flex-wrap:wrap;">
-                <button class="btn btn--primary btn--sm" data-bulk-act="approve" type="button" disabled>Approve selected</button>
-                <button class="btn btn--sm" data-bulk-act="needs_info" type="button" disabled>Needs info</button>
-                <button class="btn btn--danger btn--sm" data-bulk-act="reject" type="button" disabled>Reject</button>
-              </div>
-            </header>
-            <form class="dash-card__filters" data-queue-form>
-              <label class="dash-search">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
-                <input type="text" placeholder="Search name, slug, EIIN…" data-q autocomplete="off" />
-              </label>
-              <label class="dash-filter">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                <select data-status>
+              <div class="col-md-4">
+                <select class="form-select form-select-sm" data-status>
                   <option value="pending">Pending</option>
                   <option value="needs_info">Needs info</option>
                   <option value="rejected">Rejected</option>
@@ -260,53 +250,54 @@
                   <option value="seeded">Seeded</option>
                   <option value="any">Any</option>
                 </select>
-              </label>
+              </div>
             </form>
-            <div class="dash-table-wrap">
-              <table class="dash-table" data-queue-table>
+            <div class="table-responsive">
+              <table class="table dash-table-v5 align-middle mb-0" data-queue-table>
                 <thead>
                   <tr>
-                    <th class="t-check"><input type="checkbox" data-bulk-toggle aria-label="Select all" /></th>
+                    <th style="width:40px;"><input type="checkbox" class="form-check-input" data-bulk-toggle aria-label="Select all"></th>
                     <th>Institution</th>
                     <th>Status</th>
                     <th>Brand</th>
                     <th>Submitted</th>
-                    <th class="text-right">Action</th>
+                    <th class="text-end">Action</th>
                   </tr>
                 </thead>
                 <tbody data-queue-body>
-                  <tr><td colspan="6"><div class="skeleton" style="height:48px;"></div></td></tr>
+                  <tr><td colspan="6"><div class="skeleton-v5" style="height:48px;"></div></td></tr>
                 </tbody>
               </table>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- =================== USERS PANE =================== -->
-        <section class="dash-pane" data-pane="users" hidden>
-          <div class="card dash-card">
-            <header class="dash-card__head">
-              <div>
-                <h2 class="dash-card__title">Users</h2>
-                <p class="dash-card__sub">Promote trusted teammates to admin or revoke access. The last admin can't be demoted.</p>
+      <!-- ===== USERS PANE ===== -->
+      <section data-pane="users" hidden>
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-transparent border-bottom py-3">
+            <h5 class="mb-1"><i class="bi bi-people-fill me-2 text-primary"></i>Users</h5>
+            <p class="text-muted small mb-0">Promote teammates to admin or revoke access.</p>
+          </div>
+          <div class="card-body">
+            <form class="row g-2 mb-3" data-users-form>
+              <div class="col-md-8">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-transparent"><i class="bi bi-search"></i></span>
+                  <input type="text" class="form-control" placeholder="Search email, name or mobile..." data-users-q autocomplete="off">
+                </div>
               </div>
-            </header>
-            <form class="dash-card__filters" data-users-form>
-              <label class="dash-search">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
-                <input type="text" placeholder="Search email, name or mobile…" data-users-q autocomplete="off" />
-              </label>
-              <label class="dash-filter">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                <select data-users-role>
+              <div class="col-md-4">
+                <select class="form-select form-select-sm" data-users-role>
                   <option value="any">All roles</option>
                   <option value="admin">Admins only</option>
                   <option value="user">Owners only</option>
                 </select>
-              </label>
+              </div>
             </form>
-            <div class="dash-table-wrap">
-              <table class="dash-table" data-users-table>
+            <div class="table-responsive">
+              <table class="table dash-table-v5 align-middle mb-0" data-users-table>
                 <thead>
                   <tr>
                     <th>User</th>
@@ -314,129 +305,158 @@
                     <th>Provider</th>
                     <th>Claims</th>
                     <th>Joined</th>
-                    <th class="text-right">Action</th>
+                    <th class="text-end">Action</th>
                   </tr>
                 </thead>
                 <tbody data-users-body>
-                  <tr><td colspan="6"><div class="skeleton" style="height:48px;"></div></td></tr>
+                  <tr><td colspan="6"><div class="skeleton-v5" style="height:48px;"></div></td></tr>
                 </tbody>
               </table>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- =================== RESERVED PANE =================== -->
-        <section class="dash-pane" data-pane="reserved" hidden>
-          <div class="card dash-card">
-            <header class="dash-card__head">
-              <div>
-                <h2 class="dash-card__title">Reserved slugs</h2>
-                <p class="dash-card__sub">Block these subdomains from being claimed. System defaults are seeded automatically.</p>
-              </div>
-            </header>
-            <form class="dash-card__filters" data-reserved-form>
-              <label class="dash-search">
-                <input type="text" placeholder="Add reserved slug (e.g. www)" name="slug" required />
-              </label>
-              <label class="dash-search" style="flex:1;">
-                <input type="text" placeholder="Reason (optional)" name="reason" />
-              </label>
-              <button class="btn btn--primary" type="submit">Reserve</button>
-            </form>
-            <div data-reserved class="reserved-list"></div>
+
+      <!-- ===== RESERVED PANE ===== -->
+      <section data-pane="reserved" hidden>
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-transparent border-bottom py-3">
+            <h5 class="mb-1"><i class="bi bi-lock-fill me-2 text-primary"></i>Reserved Slugs</h5>
+            <p class="text-muted small mb-0">Block subdomains from being claimed.</p>
           </div>
-        </section>
-
-        <!-- =================== AUDIT PANE =================== -->
-        <section class="dash-pane" data-pane="audit" hidden>
-          <div class="card dash-card">
-            <header class="dash-card__head">
-              <div>
-                <h2 class="dash-card__title">Audit log</h2>
-                <p class="dash-card__sub">Filter by action prefix, actor email, institution ID or free-text detail.</p>
+          <div class="card-body">
+            <form class="row g-2 mb-3" data-reserved-form>
+              <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" placeholder="Add slug (e.g. www)" name="slug" required>
               </div>
-            </header>
-            <form class="dash-card__filters dash-card__filters--audit" data-audit-form>
-              <label class="dash-search">
-                <input type="text" placeholder="Action prefix (e.g. admin.decide)" name="action" />
-              </label>
-              <label class="dash-search">
-                <input type="text" placeholder="Search detail / actor email" name="q" />
-              </label>
-              <label class="dash-search">
-                <input type="number" placeholder="Inst ID" name="inst_id" min="1" />
-              </label>
-              <button class="btn btn--primary" type="submit">Filter</button>
+              <div class="col-md-5">
+                <input type="text" class="form-control form-control-sm" placeholder="Reason (optional)" name="reason">
+              </div>
+              <div class="col-md-3">
+                <button class="btn btn-primary btn-sm w-100" type="submit"><i class="bi bi-plus-lg me-1"></i> Reserve</button>
+              </div>
             </form>
-            <div data-audit class="dash-table-wrap"></div>
+            <div data-reserved></div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- =================== EXPORTS PANE =================== -->
-        <section class="dash-pane" data-pane="exports" hidden>
-          <div class="card dash-card">
-            <header class="dash-card__head">
-              <div>
-                <h2 class="dash-card__title">CSV exports</h2>
-                <p class="dash-card__sub">Download every claim or every user as a UTF-8 CSV (Excel-friendly, includes Bengali columns).</p>
+      <!-- ===== AUDIT PANE ===== -->
+      <section data-pane="audit" hidden>
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-transparent border-bottom py-3">
+            <h5 class="mb-1"><i class="bi bi-journal-text me-2 text-primary"></i>Audit Log</h5>
+            <p class="text-muted small mb-0">Filter by action, actor email, institution ID.</p>
+          </div>
+          <div class="card-body">
+            <form class="row g-2 mb-3" data-audit-form>
+              <div class="col-md-3">
+                <input type="text" class="form-control form-control-sm" placeholder="Action prefix" name="action">
               </div>
-            </header>
-            <div class="exports-grid">
-              <div class="export-card">
-                <h4>All claims</h4>
-                <p class="text-muted">Every institutions row — slug, status, DNS state, EIIN, contact info.</p>
-                <a class="btn btn--primary" data-export="claims">Download claims.csv</a>
+              <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" placeholder="Search detail / email" name="q">
               </div>
-              <div class="export-card">
-                <h4>All users</h4>
-                <p class="text-muted">Email, mobile, designation, division/district/upazila, admin flag.</p>
-                <a class="btn" data-export="users">Download users.csv</a>
+              <div class="col-md-2">
+                <input type="number" class="form-control form-control-sm" placeholder="Inst ID" name="inst_id" min="1">
+              </div>
+              <div class="col-md-3">
+                <button class="btn btn-primary btn-sm w-100" type="submit"><i class="bi bi-funnel me-1"></i> Filter</button>
+              </div>
+            </form>
+            <div data-audit class="table-responsive"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== EXPORTS PANE ===== -->
+      <section data-pane="exports" hidden>
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-transparent border-bottom py-3">
+            <h5 class="mb-1"><i class="bi bi-download me-2 text-primary"></i>CSV Exports</h5>
+            <p class="text-muted small mb-0">Download every claim or user as UTF-8 CSV.</p>
+          </div>
+          <div class="card-body">
+            <div class="row g-4">
+              <div class="col-md-6">
+                <div class="export-card-v5 h-100">
+                  <h6><i class="bi bi-globe2 me-2 text-primary"></i>All Claims</h6>
+                  <p class="text-muted small">Slug, status, DNS state, EIIN, contact info.</p>
+                  <a class="btn btn-primary btn-sm" data-export="claims"><i class="bi bi-download me-1"></i> Download claims.csv</a>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="export-card-v5 h-100">
+                  <h6><i class="bi bi-people me-2 text-primary"></i>All Users</h6>
+                  <p class="text-muted small">Email, mobile, designation, division, admin flag.</p>
+                  <a class="btn btn-outline-primary btn-sm" data-export="users"><i class="bi bi-download me-1"></i> Download users.csv</a>
+                </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- =================== SETTINGS PANE =================== -->
-        <section class="dash-pane" data-pane="settings" hidden>
-          <div data-settings-host></div>
-        </section>
+      <!-- ===== SETTINGS PANE ===== -->
+      <section data-pane="settings" hidden>
+        <div data-settings-host></div>
+      </section>
 
-        <!-- =================== INTEGRATIONS PANE =================== -->
-        <section class="dash-pane" data-pane="integrations" hidden>
-          <div data-integrations-host></div>
-        </section>
+      <!-- ===== INTEGRATIONS PANE ===== -->
+      <section data-pane="integrations" hidden>
+        <div data-integrations-host></div>
+      </section>
 
-        <!-- =================== PAYMENTS PANE =================== -->
-        <section class="dash-pane" data-pane="payments" hidden>
-          <div data-payments-admin-host></div>
-        </section>
+      <!-- ===== PAYMENTS PANE ===== -->
+      <section data-pane="payments" hidden>
+        <div data-payments-admin-host></div>
+      </section>
 
-        <!-- =================== RENEWALS PANE (v4.1) =================== -->
-        <section class="dash-pane" data-pane="renewals" hidden>
-          <div data-renewals-host></div>
-        </section>
+      <!-- ===== RENEWALS PANE ===== -->
+      <section data-pane="renewals" hidden>
+        <div data-renewals-host></div>
+      </section>
 
-      </main>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ DETAIL MODAL ============================ -->
-<div class="modal-bg" data-detail-modal>
-  <div class="modal modal--xl">
-    <button class="modal__close" data-close-detail aria-label="Close">&times;</button>
-    <div data-detail-body><div class="skeleton" style="height:200px;"></div></div>
+    </main>
   </div>
 </div>
 
-<footer class="footer">
-  <div class="container footer__bottom">
-    <span>© <span data-year></span> institution.bd</span>
-    <span><a href="/">Home</a> · <a href="/privacy.php">Privacy</a> · <a href="/terms.php">Terms</a></span>
+
+<!-- ===== DETAIL MODAL ===== -->
+<div class="modal fade modal-v5" id="detailModal" tabindex="-1" data-detail-modal>
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Claim Review</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" data-close-detail></button>
+      </div>
+      <div class="modal-body" data-detail-body>
+        <div class="skeleton-v5" style="height:200px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<footer class="footer-v5">
+  <div class="container">
+    <div class="footer-bottom d-flex justify-content-between flex-wrap gap-2">
+      <span>&copy; <span data-year></span> institution.bd</span>
+      <span>
+        <a href="/">Home</a> &middot;
+        <a href="/privacy.php">Privacy</a> &middot;
+        <a href="/terms.php">Terms</a>
+      </span>
+    </div>
   </div>
 </footer>
 
-<script src="/assets/js/app.js"></script>
-<script src="/assets/js/admin.js"></script>
+<!-- Toast Container -->
+<div class="toast-container-v5" id="toastHost"></div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/assets/js/app.js" type="module"></script>
+<script src="/assets/js/admin.js" type="module"></script>
 </body>
 </html>
