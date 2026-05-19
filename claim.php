@@ -89,8 +89,8 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
         <h5 class="mb-3"><i class="bi bi-building me-2 text-primary"></i>Institution details</h5>
         <form data-claim-details-form>
           <div class="row g-3">
-            <div class="col-md-6"><label class="form-label small fw-semibold">Institution name (English)</label><input class="form-control" name="name_en" required></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">প্রতিষ্ঠানের নাম (বাংলা)</label><input class="form-control" name="name_bn"></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">Institution name (English)</label><input class="form-control" name="name_en" required><div class="invalid-feedback"></div></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">প্রতিষ্ঠানের নাম (বাংলা)</label><input class="form-control" name="name_bn"><div class="invalid-feedback"></div></div>
             <div class="col-md-6"><label class="form-label small fw-semibold">Category</label>
               <select class="form-select" name="category">
                 <option value="">— Select —</option>
@@ -98,16 +98,17 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
                 <option>Madrasa</option><option>Polytechnic</option><option>Training Institute</option>
                 <option>NGO</option><option>Other</option>
               </select>
+              <div class="invalid-feedback"></div>
             </div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">EIIN <span class="text-muted">(optional)</span></label><input class="form-control" name="eiin"></div>
-            <div class="col-md-4"><label class="form-label small fw-semibold">Division</label><select class="form-select" name="division" data-bd-division><option value="">—</option></select></div>
-            <div class="col-md-4"><label class="form-label small fw-semibold">District</label><select class="form-select" name="district" data-bd-district><option value="">—</option></select></div>
-            <div class="col-md-4"><label class="form-label small fw-semibold">Upazila</label><select class="form-select" name="upazila" data-bd-upazila><option value="">—</option></select></div>
-            <div class="col-12"><label class="form-label small fw-semibold">Address</label><input class="form-control" name="address"></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Contact name</label><input class="form-control" name="contact_name"></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Contact phone</label><input class="form-control" name="contact_phone"></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Contact email</label><input class="form-control" name="contact_email" type="email"></div>
-            <div class="col-md-6"><label class="form-label small fw-semibold">Website <span class="text-muted">(optional)</span></label><input class="form-control" name="website"></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">EIIN <span class="text-muted">(optional)</span></label><input class="form-control" name="eiin"><div class="invalid-feedback"></div></div>
+            <div class="col-md-4"><label class="form-label small fw-semibold">Division</label><select class="form-select" name="division" data-bd-division><option value="">—</option></select><div class="invalid-feedback"></div></div>
+            <div class="col-md-4"><label class="form-label small fw-semibold">District</label><select class="form-select" name="district" data-bd-district><option value="">—</option></select><div class="invalid-feedback"></div></div>
+            <div class="col-md-4"><label class="form-label small fw-semibold">Upazila</label><select class="form-select" name="upazila" data-bd-upazila><option value="">—</option></select><div class="invalid-feedback"></div></div>
+            <div class="col-12"><label class="form-label small fw-semibold">Address</label><input class="form-control" name="address"><div class="invalid-feedback"></div></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">Contact name</label><input class="form-control" name="contact_name"><div class="invalid-feedback"></div></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">Contact phone</label><input class="form-control" name="contact_phone"><div class="invalid-feedback"></div></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">Contact email</label><input class="form-control" name="contact_email" type="email"><div class="invalid-feedback"></div></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">Website <span class="text-muted">(optional)</span></label><input class="form-control" name="website"><div class="invalid-feedback"></div></div>
             <div class="col-12 text-end">
               <button class="btn btn-primary" type="submit"><i class="bi bi-shield-check me-1"></i> Review & Submit</button>
             </div>

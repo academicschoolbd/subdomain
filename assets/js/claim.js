@@ -303,10 +303,41 @@
 
   // ─── Final Submission ──────────────────────────────────────────────────────
 
+  function clearValidationState() {
+    if (!detailsForm) return;
+    detailsForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    detailsForm.querySelectorAll('.invalid-feedback').forEach(el => { el.textContent = ''; });
+  }
+
+  function showFieldErrors(errors) {
+    if (!detailsForm || !errors || typeof errors !== 'object') return false;
+    const keys = Object.keys(errors);
+    if (keys.length === 0) return false;
+    let displayed = 0;
+    for (const [fieldName, message] of Object.entries(errors)) {
+      const el = detailsForm.querySelector(`[name="${fieldName}"]`);
+      if (!el) continue;
+      el.classList.add('is-invalid');
+      let feedback = el.nextElementSibling;
+      if (!feedback || !feedback.classList.contains('invalid-feedback')) {
+        feedback = document.createElement('div');
+        feedback.className = 'invalid-feedback';
+        el.parentNode.insertBefore(feedback, el.nextSibling);
+      }
+      feedback.textContent = message;
+      feedback.style.display = 'block';
+      displayed++;
+    }
+    return displayed > 0;
+  }
+
   async function submitClaim(modal) {
     const submitBtn = modal.querySelector('[data-confirm-submit]');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Submitting...';
+
+    // Clear previous validation state
+    clearValidationState();
 
     // Collect form data from step 2 (if visible)
     const body = { slug: _selectedSlug, brand: _selectedBrand };
@@ -342,6 +373,12 @@
         if (bsModal) bsModal.hide();
         App.toast('Please complete your profile first', 'error');
         showStep(2);
+      } else if (e?.errors && typeof e.errors === 'object' && Object.keys(e.errors).length > 0) {
+        // Field-level errors: close modal, show step 2 with highlighted fields
+        const bsModal = bootstrap.Modal.getInstance(modal);
+        if (bsModal) bsModal.hide();
+        showStep(2);
+        showFieldErrors(e.errors);
       } else {
         App.toast(e?.detail || 'Submission failed — please try again.', 'error');
       }
