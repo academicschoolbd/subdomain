@@ -127,11 +127,15 @@
         // v4.5 — instant-response feel: collapse the global mobile drawer
         // (if open) and snap the pane content to the top of the viewport
         // so the user sees the new pane immediately on phones / tablets.
+        // v5 — also close the new sidebar drawer (data-dash-sidebar).
         const drawer = document.querySelector('[data-nav-mobile]');
         if (drawer && drawer.classList.contains('open')) {
           drawer.classList.remove('open');
           const t = document.querySelector('[data-nav-toggle]');
           if (t) t.setAttribute('aria-expanded', 'false');
+        }
+        if (window.AppDrawer && window.AppDrawer.isOpen()) {
+          window.AppDrawer.close();
         }
         if (window.matchMedia && window.matchMedia('(max-width: 899px)').matches) {
           const main = document.querySelector('.dash-main');

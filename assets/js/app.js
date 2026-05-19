@@ -870,3 +870,181 @@
     applyBrandTheme,
   };
 })();
+
+
+
+/* ===========================================================================
+   v5 — admin / dashboard sidebar drawer (mobile-only behaviour)
+   ----------------------------------------------------------------------------
+   Wires every page that has a [data-dash-sidebar] aside.
+     • [data-dash-drawer-open]  → opens the drawer
+     • [data-dash-drawer-close] → closes the drawer
+     • [data-dash-backdrop]     → backdrop element (click closes)
+     • Esc key                  → closes the drawer
+     • Selecting any item inside the sidebar (button, link, or an item with
+       [data-pane-btn]) auto-closes the drawer — that's the "admin nav menu
+       hides when you click an option" behaviour from the v5 spec.
+     • Body gets .is-drawer-open while open so scroll is locked underneath.
+   The whole module is a no-op on pages that don't have the sidebar markup,
+   so it's safe to load globally from app.js.
+   =========================================================================== */
+(function () {
+  'use strict';
+  if (typeof document === 'undefined') return;
+
+  function ready(fn) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fn);
+    } else { fn(); }
+  }
+
+  ready(function () {
+    var sidebar  = document.querySelector('[data-dash-sidebar]');
+    if (!sidebar) return; // page has no admin/dashboard drawer
+
+    var backdrop = document.querySelector('[data-dash-backdrop]');
+    var openers  = document.querySelectorAll('[data-dash-drawer-open]');
+    var closers  = document.querySelectorAll('[data-dash-drawer-close]');
+    var trigger  = document.querySelector('[data-dash-drawer-open]');
+    var label    = document.querySelector('[data-dash-drawer-current]');
+    var navItems = sidebar.querySelectorAll('[data-pane-btn], .dash-nav__item, .dash-nav a');
+
+    var isMobile = function () {
+      return window.matchMedia && window.matchMedia('(max-width: 899px)').matches;
+    };
+
+    function openDrawer() {
+      if (!isMobile()) return;
+      sidebar.classList.add('is-open');
+      if (backdrop) {
+        backdrop.hidden = false;
+        // Force a paint frame before applying .is-open so the CSS transition runs.
+        requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+      }
+      document.body.classList.add('is-drawer-open');
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+      // Move keyboard focus into the drawer for accessibility.
+      var firstFocusable = sidebar.querySelector('button, a, [tabindex]');
+      if (firstFocusable) {
+        try { firstFocusable.focus({ preventScroll: true }); } catch (e) { firstFocusable.focus(); }
+      }
+    }
+
+    function closeDrawer() {
+      sidebar.classList.remove('is-open');
+      if (backdrop) {
+        backdrop.classList.remove('is-open');
+        // Wait for the CSS transition to finish before fully hiding the
+        // overlay, so the fade-out is visible.
+        setTimeout(function () {
+          if (!sidebar.classList.contains('is-open')) backdrop.hidden = true;
+        }, 240);
+      }
+      document.body.classList.remove('is-drawer-open');
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    // Expose so other scripts (admin.js / dashboard.js) can hook in.
+    window.AppDrawer = {
+      open: openDrawer,
+      close: closeDrawer,
+      isOpen: function () { return sidebar.classList.contains('is-open'); },
+      setLabel: function (text) { if (label && text) label.textContent = text; }
+    };
+
+    // Wire opener buttons.
+    openers.forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (sidebar.classList.contains('is-open')) closeDrawer();
+        else openDrawer();
+      });
+    });
+
+    // Wire close buttons + backdrop click.
+    closers.forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        closeDrawer();
+      });
+    });
+    if (backdrop) {
+      backdrop.addEventListener('click', closeDrawer);
+    }
+
+    // Auto-close when the user picks a nav item (pane button OR plain link).
+    navItems.forEach(function (item) {
+      item.addEventListener('click', function () {
+        if (!isMobile()) return;
+        // Update the trigger button label so the user sees what they've
+        // selected when the drawer collapses.
+        var text = item.querySelector('span:not(.dash-nav__ico):not(.dash-nav__count)');
+        if (label && text && text.textContent.trim()) {
+          label.textContent = text.textContent.trim();
+        }
+        // Defer so any same-click navigation happens before we close.
+        setTimeout(closeDrawer, 0);
+      });
+    });
+
+    // Esc closes the drawer.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {
+        closeDrawer();
+      }
+    });
+
+    // If the viewport grows past the desktop breakpoint while the drawer is
+    // open, undo the body scroll-lock — the desktop layout is back.
+    window.addEventListener('resize', function () {
+      if (!isMobile() && document.body.classList.contains('is-drawer-open')) {
+        closeDrawer();
+      }
+    });
+  });
+})();
+
+
+
+/* ===========================================================================
+   v5 — platform status pill (lives in the footer of every page).
+   Hits /api/healthz once on load and flips the dot/text to indicate health.
+   No-op when there's no [data-platform-status] in the DOM.
+   =========================================================================== */
+(function () {
+  'use strict';
+  function init() {
+    var pill = document.querySelector('[data-platform-status]');
+    if (!pill) return;
+    var dot  = pill.querySelector('.footer__status-dot');
+    var txt  = pill.querySelector('[data-platform-status-text]');
+    if (!txt) return;
+
+    function setState(state) {
+      if (!dot) return;
+      dot.classList.remove('footer__status-dot--err', 'footer__status-dot--warn');
+      if (state === 'err')  dot.classList.add('footer__status-dot--err');
+      if (state === 'warn') dot.classList.add('footer__status-dot--warn');
+    }
+
+    fetch('/api/healthz', { method: 'GET', credentials: 'omit' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+      .then(function (j) {
+        if (j && j.ok) {
+          setState('ok');
+          txt.textContent = 'All systems operational';
+        } else {
+          setState('warn');
+          txt.textContent = 'Degraded performance';
+        }
+      })
+      .catch(function () {
+        setState('err');
+        txt.textContent = 'Status check failed';
+      });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
+})();

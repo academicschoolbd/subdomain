@@ -54,13 +54,17 @@
   <div class="container">
     <div class="dash-grid">
 
-      <!-- =================== SIDEBAR =================== -->
-      <aside class="dash-sidebar" aria-label="Control panel navigation">
+      <!-- =================== SIDEBAR DRAWER (mobile) =================== -->
+      <div class="dash-backdrop" data-dash-backdrop hidden></div>
+      <aside class="dash-sidebar" id="dashboard-drawer" data-dash-sidebar aria-label="Control panel navigation">
         <header class="dash-sidebar__head">
           <span class="dash-sidebar__crest" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </span>
           <span>Control Panel</span>
+          <button type="button" class="dash-sidebar__close" data-dash-drawer-close aria-label="Close menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </header>
 
         <nav class="dash-nav">
@@ -98,6 +102,15 @@
 
       <!-- =================== MAIN =================== -->
       <main class="dash-main">
+
+        <!-- v5 — drawer trigger (mobile only) -->
+        <button class="dash-drawer-trigger" type="button" data-dash-drawer-open aria-controls="dashboard-drawer" aria-expanded="false">
+          <span class="dash-drawer-trigger__bars" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+          </span>
+          <span class="dash-drawer-trigger__label" data-dash-drawer-current>Control Panel menu</span>
+          <span class="dash-drawer-trigger__hint">Tap to open</span>
+        </button>
 
         <!-- Stay-connected banner — v4.1 modern glass card with mesh gradient. -->
         <section class="connect-band" data-banner>
@@ -251,6 +264,13 @@
   <div class="container footer__bottom">
     <span>© <span data-year></span> institution.bd</span>
     <span><a href="/">Home</a> · <a href="/directory.php">Directory</a> · <a href="/claim.php">Claim</a> · <a href="/privacy.php">Privacy</a> · <a href="/terms.php">Terms</a></span>
+    <span class="footer__heart"><span class="footer__heart-ico" aria-hidden="true">&#10084;&#65039;</span> Built with love in Bangladesh</span>
+  </div>
+  <div class="container footer__status" aria-live="polite">
+    <span class="footer__status-pill" data-platform-status>
+      <span class="footer__status-dot" aria-hidden="true"></span>
+      <span data-platform-status-text>All systems operational</span>
+    </span>
   </div>
 </footer>
 

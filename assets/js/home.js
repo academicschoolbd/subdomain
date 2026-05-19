@@ -299,3 +299,10 @@
   });
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
 })();
+
+
+
+/* ===========================================================================
+   v5 — platform status pill in the footer (homepage-only legacy stub).
+   The real implementation now lives in app.js so every page benefits.
+   =========================================================================== */
