@@ -44,7 +44,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
       <ul class="navbar-nav mx-auto gap-1">
         <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house me-1"></i> Home</a></li>
         <li class="nav-item"><a class="nav-link" href="/directory.php"><i class="bi bi-grid me-1"></i> Directory</a></li>
-        <li class="nav-item"><a class="nav-link" href="/dashboard.php"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/dashboard.php"><i class="bi bi-speedometer2 me-1"></i> My Dashboard <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(আমার ড্যাশবোর্ড)</span></a></li>
         <li class="nav-item"><a class="nav-link active" href="/admin.php"><i class="bi bi-shield-lock me-1"></i> Admin</a></li>
       </ul>
     </div>
@@ -268,7 +268,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
               <table class="table dash-table-v5 align-middle mb-0" data-queue-table>
                 <thead>
                   <tr>
-                    <th style="width:40px;"><input type="checkbox" class="form-check-input" data-bulk-toggle aria-label="Select all"></th>
+                    <th class="col-checkbox"><input type="checkbox" class="form-check-input" data-bulk-toggle aria-label="Select all"></th>
                     <th>Institution</th>
                     <th>Status</th>
                     <th>Brand</th>

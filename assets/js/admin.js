@@ -238,8 +238,10 @@
         <td><span class="badge badge-brand">${App.escapeHtml(c.brand)}</span></td>
         <td class="small text-muted">${App.escapeHtml(App.fmtDate(c.created_at))}</td>
         <td class="text-end">
-          <button class="btn btn-primary btn-sm" data-detail="${c.id}"><i class="bi bi-eye me-1"></i>Review</button>
-          <button class="btn btn-outline-danger btn-sm ms-1" data-act="delete" data-id="${c.id}" data-slug="${App.escapeHtml(c.slug)}" data-subdomain="${App.escapeHtml(c.subdomain)}" title="Delete permanently" aria-label="Delete claim permanently"><i class="bi bi-trash" aria-hidden="true"></i></button>
+          <div class="d-flex flex-column flex-sm-row gap-1 justify-content-end">
+            <button class="btn btn-primary btn-sm" data-detail="${c.id}"><i class="bi bi-eye me-1"></i>Review</button>
+            <button class="btn btn-outline-danger btn-sm" data-act="delete" data-id="${c.id}" data-slug="${App.escapeHtml(c.slug)}" data-subdomain="${App.escapeHtml(c.subdomain)}" title="Delete permanently" aria-label="Delete claim permanently"><i class="bi bi-trash" aria-hidden="true"></i></button>
+          </div>
         </td>
       </tr>`).join('');
 
@@ -673,7 +675,7 @@
           <h6 class="fw-semibold mb-3"><i class="bi bi-palette me-2"></i>Theme Color</h6>
           <div class="mb-3">
             <div class="d-flex flex-wrap align-items-center mb-2">${swatchesHtml}</div>
-            <div class="input-group" style="max-width:220px;">
+            <div class="input-group input-group-sm flex-nowrap" style="max-width:min(220px,100%);">
               <span class="input-group-text"><i class="bi bi-hash"></i></span>
               <input type="text" class="form-control form-control-sm" data-theme-hex
                 value="${App.escapeHtml(s.theme_primary_hex || '')}" placeholder="0f766e" maxlength="7">
@@ -1400,8 +1402,8 @@
     const rows = _sponsors.map(s => `
       <tr>
         <td>${App.escapeHtml(s.name)}</td>
-        <td class="small text-muted text-truncate" style="max-width:180px;">${App.escapeHtml(s.logo_url)}</td>
-        <td class="small text-muted text-truncate" style="max-width:150px;">${App.escapeHtml(s.website_url || '-')}</td>
+        <td class="small text-muted cell-url">${App.escapeHtml(s.logo_url)}</td>
+        <td class="small text-muted cell-url-short">${App.escapeHtml(s.website_url || '-')}</td>
         <td>
           <div class="form-check form-switch d-inline-block">
             <input class="form-check-input" type="checkbox" data-sponsor-toggle="${s.id}" ${s.visible ? 'checked' : ''}>

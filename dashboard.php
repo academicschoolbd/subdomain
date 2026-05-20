@@ -45,7 +45,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
         <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house me-1"></i> Home</a></li>
         <li class="nav-item"><a class="nav-link" href="/directory.php"><i class="bi bi-grid me-1"></i> Directory</a></li>
         <li class="nav-item"><a class="nav-link" href="/claim.php"><i class="bi bi-plus-circle me-1"></i> Claim</a></li>
-        <li class="nav-item"><a class="nav-link active" href="/dashboard.php"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link active" href="/dashboard.php"><i class="bi bi-speedometer2 me-1"></i> My Dashboard <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(আমার ড্যাশবোর্ড)</span></a></li>
       </ul>
     </div>
   </div>

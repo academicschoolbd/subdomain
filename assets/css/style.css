@@ -1035,12 +1035,54 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* ===== Integrations pane mobile fix ===== */
-[data-integrations-host] code {
+/* ===== Admin pane mobile polish (generalized from integrations 8de04ea) ===== */
+
+/* Long inline code samples (redirect URIs, callbacks, JSON keys) wrap on phones
+   in every admin pane card-body, not just integrations. */
+.dash-content code {
   word-break: break-all;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
 }
+
+/* Integrations pane keeps its own overflow-x clip (it has no per-row Manage
+   modal). Do NOT extend overflow-x:hidden to .dash-content; that would clip
+   the queue/users/sponsors Manage / detail modals. */
 [data-integrations-host] .card-body {
   overflow-x: hidden;
+}
+
+/* Replaces inline style="width:40px;" on the queue checkbox <th>. */
+.dash-table-v5 th.col-checkbox {
+  width: 2.5rem;
+  min-width: 2.5rem;
+}
+
+/* Replaces inline style="max-width:180px;" / "max-width:150px;" on sponsors
+   logo/website URL cells. The sm variant is for the shorter Website column. */
+.dash-table-v5 td.cell-url,
+.dash-table-v5 td.cell-url-short {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-table-v5 td.cell-url      { max-width: 220px; }
+.dash-table-v5 td.cell-url-short{ max-width: 160px; }
+
+/* Below the sm breakpoint relax the URL cell cap so the cell stays readable
+   inside the .table-responsive scroll container. */
+@media (max-width: 575.98px) {
+  .dash-table-v5 td.cell-url,
+  .dash-table-v5 td.cell-url-short {
+    max-width: 50vw;
+  }
+}
+
+/* When an action TD stacks its buttons vertically below sm
+   (queue pane: <td><div class="d-flex flex-column flex-sm-row ...">), make
+   each stacked button full-width so Review and the trash icon align. */
+@media (max-width: 575.98px) {
+  .dash-table-v5 td .d-flex.flex-column > .btn {
+    width: 100%;
+  }
 }
 

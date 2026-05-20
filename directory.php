@@ -38,7 +38,7 @@ if (!function_exists('theme_emit_head_style')) { function theme_emit_head_style(
         <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
         <li class="nav-item"><a class="nav-link active" href="/directory.php">Directory</a></li>
         <li class="nav-item"><a class="nav-link" href="/claim.php">Claim</a></li>
-        <li class="nav-item"><a class="nav-link" href="/dashboard.php">Dashboard</a></li>
+        <li class="nav-item" data-auth-only hidden><a class="nav-link" href="/dashboard.php"><i class="bi bi-speedometer2 me-1"></i> My Dashboard <span lang="bn" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">(আমার ড্যাশবোর্ড)</span></a></li>
       </ul>
     </div>
   </div>
