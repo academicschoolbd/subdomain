@@ -1,0 +1,677 @@
+/* ===========================================================================
+   institution.bd — v5pro Owner Dashboard
+   Modern ES6+, Bootstrap 5.3 integration.
+   =========================================================================== */
+(function () {
+  'use strict';
+  const App = window.App;
+  if (!App) return;
+
+  const needAuth = document.querySelector('[data-needs-auth]');
+  const dashRoot = document.querySelector('[data-dash-root]');
+  const manageBody = document.querySelector('[data-manage-body]');
+  let manageModalInstance = null;
+
+  let _claims = [];
+  let _filter = { q: '', status: 'any' };
+
+  // ─── Boot ────────────────────────────────────────────────────────────────
+
+  if (!App.isAuthed()) {
+    if (needAuth) needAuth.hidden = false;
+    return;
+  }
+
+  App.api('/auth/me').then(r => {
+    App.setSession(null, r.user);
+    if (dashRoot) dashRoot.hidden = false;
+    renderBanner();
+    renderAccountCard();
+    wirePaneSwitcher();
+    wireFilters();
+    wireManageModal();
+    loadDomains();
+  }).catch(e => {
+    if (e?.status === 401) {
+      App.clearSession();
+      if (needAuth) needAuth.hidden = false;
+    } else {
+      App.toast(e?.detail || 'Could not load account', 'error');
+    }
+  });
+
+  // ─── Banner ──────────────────────────────────────────────────────────────
+
+  async function renderBanner() {
+    let s;
+    try { s = await App.getSettings(); } catch { return; }
+    const wa = s?.whatsapp || {};
+    const site = s?.site || {};
+    const titleEl = document.querySelector('[data-banner-title]');
+    const subEl = document.querySelector('[data-banner-sub]');
+    if (titleEl) titleEl.textContent = `Stay Connected with ${site.name || 'institution.bd'}`;
+    if (subEl) subEl.textContent = wa.community_subtitle || 'Join our community for support, tips & updates.';
+
+    document.querySelectorAll('[data-banner-community]').forEach(el => {
+      if (wa.community_url) el.href = wa.community_url;
+      else if (wa.support_url) el.href = wa.support_url;
+    });
+    document.querySelectorAll('[data-banner-like], [data-banner-creator]').forEach(el => {
+      el.href = wa.support_url || wa.community_url || '#';
+    });
+    const credText = document.querySelector('[data-banner-creator-text]');
+    if (credText) credText.textContent = site.creator_name ? `Follow: ${site.creator_name}` : 'Follow Creator';
+  }
+
+
+  // ─── Pane Switcher ─────────────────────────────────────────────────────────
+
+  function wirePaneSwitcher() {
+    document.querySelectorAll('[data-pane-btn]').forEach(btn => {
+      btn.addEventListener('click', () => activatePane(btn.getAttribute('data-pane-btn')));
+    });
+    document.querySelectorAll('[data-signout]').forEach(btn => {
+      btn.addEventListener('click', e => { e.preventDefault(); App.clearSession(); location.href = '/'; });
+    });
+  }
+
+  function activatePane(name) {
+    document.querySelectorAll('[data-pane-btn]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-pane-btn') === name);
+    });
+    document.querySelectorAll('[data-pane]').forEach(p => {
+      p.hidden = p.getAttribute('data-pane') !== name;
+    });
+    if (name === 'settings') renderAccountCard();
+    if (name === 'support') renderSupportPayments();
+  }
+
+  // ─── Quick Tiles ───────────────────────────────────────────────────────────
+
+  function renderQuickTiles() {
+    const host = document.querySelector('[data-quick-host]');
+    if (!host) return;
+    const total = _claims.length;
+    const verified = _claims.filter(c => c.status === 'verified').length;
+    const pending = _claims.filter(c => c.status === 'pending').length;
+    const actionable = _claims.filter(c => ['needs_info','rejected','suspended'].includes(c.status) || (c.status==='verified' && c.dns_status==='error')).length;
+
+    host.innerHTML = `
+      <div class="col-6 col-lg-3">
+        <div class="quick-tile-v5" data-quick-filter="any">
+          <div class="tile-icon"><i class="bi bi-globe2"></i></div>
+          <div class="tile-num">${total}</div>
+          <div class="tile-label">Total Domains</div>
+          <div class="tile-hint">Across both brands</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="quick-tile-v5" data-quick-filter="verified">
+          <div class="tile-icon" style="background:rgba(22,163,74,.1);color:#15803d;"><i class="bi bi-check-circle-fill"></i></div>
+          <div class="tile-num">${verified}</div>
+          <div class="tile-label">Verified & Live</div>
+          <div class="tile-hint">${verified ? 'SSL on, DNS published' : 'Awaiting approval'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="quick-tile-v5" data-quick-filter="pending">
+          <div class="tile-icon" style="background:rgba(37,99,235,.1);color:#2563eb;"><i class="bi bi-hourglass-split"></i></div>
+          <div class="tile-num">${pending}</div>
+          <div class="tile-label">Pending Review</div>
+          <div class="tile-hint">${pending ? 'Usually < 24h' : 'All caught up'}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="quick-tile-v5" data-quick-filter="needs_info">
+          <div class="tile-icon" style="background:rgba(220,38,38,.1);color:#dc2626;"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div class="tile-num">${actionable}</div>
+          <div class="tile-label">Action Needed</div>
+          <div class="tile-hint">${actionable ? 'Tap to review' : 'Nothing to fix'}</div>
+        </div>
+      </div>`;
+
+    host.querySelectorAll('[data-quick-filter]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const f = tile.getAttribute('data-quick-filter');
+        const sel = document.querySelector('[data-domains-status]');
+        if (sel) sel.value = f;
+        _filter.status = f;
+        renderDomainsTable();
+      });
+    });
+  }
+
+
+  // ─── Domains Table ─────────────────────────────────────────────────────────
+
+  function wireFilters() {
+    const form = document.querySelector('[data-domains-form]');
+    const qEl = document.querySelector('[data-domains-q]');
+    const sEl = document.querySelector('[data-domains-status]');
+    if (form) form.addEventListener('submit', e => e.preventDefault());
+    if (qEl) {
+      const d = App.debounce(() => { _filter.q = (qEl.value || '').toLowerCase().trim(); renderDomainsTable(); }, 150);
+      qEl.addEventListener('input', d);
+    }
+    if (sEl) sEl.addEventListener('change', () => { _filter.status = sEl.value; renderDomainsTable(); });
+  }
+
+  function loadDomains() {
+    const tbody = document.querySelector('[data-domains-body]');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5"><div class="skeleton-v5" style="height:48px;"></div></td></tr>';
+    App.api('/claims/mine').then(r => {
+      _claims = r?.claims || [];
+      const cnt = document.querySelector('[data-domain-count]');
+      if (cnt) { cnt.textContent = _claims.length; cnt.hidden = _claims.length === 0; }
+      renderQuickTiles();
+      renderDomainsTable();
+    }).catch(e => {
+      if (e?.status === 401) { App.clearSession(); if (needAuth) needAuth.hidden = false; if (dashRoot) dashRoot.hidden = true; return; }
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-danger">${App.escapeHtml(e?.detail || 'Load failed')}</td></tr>`;
+    });
+  }
+
+  function statusBadge(s) {
+    const map = { verified:'badge-verified', pending:'badge-pending', needs_info:'badge-warning', rejected:'badge-danger', seeded:'badge-muted', suspended:'badge-danger' };
+    return `<span class="badge rounded-pill ${map[s] || ''}">${App.escapeHtml(s)}</span>`;
+  }
+
+  function expiryCell(c) {
+    if (c.status !== 'verified') return '<span class="text-muted">—</span>';
+    if (!c.expires_at) return '<span class="text-muted small">No expiry</span>';
+    const d = App.fmtDate(c.expires_at);
+    const dt = c.days_to_expiry;
+    if (dt == null) return App.escapeHtml(d);
+    if (dt < 0) return `<span class="badge bg-danger-subtle text-danger">Expired ${-dt}d ago</span>`;
+    if (dt <= 30) return `<span class="badge bg-warning-subtle text-warning">In ${dt}d</span>`;
+    return `<span class="text-muted small">${App.escapeHtml(d)}</span>`;
+  }
+
+  function renderDomainsTable() {
+    const tbody = document.querySelector('[data-domains-body]');
+    if (!tbody) return;
+    let rows = _claims.slice();
+    if (_filter.status && _filter.status !== 'any') rows = rows.filter(c => c.status === _filter.status);
+    if (_filter.q) rows = rows.filter(c => (c.subdomain||'').toLowerCase().includes(_filter.q) || (c.name_en||'').toLowerCase().includes(_filter.q));
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4">
+        <i class="bi bi-globe2 fs-1 text-muted d-block mb-2"></i>
+        <p class="text-muted mb-0">${_claims.length === 0 ? 'No domains yet. <a href="/claim.php">Register one now</a>' : 'No domains match this filter.'}</p>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(c => `
+      <tr>
+        <td>
+          <div class="dash-domain-cell">
+            <span class="dash-domain-logo">${App.escapeHtml(App.initialsOf(c.name_en || c.slug))}</span>
+            <div>
+              <div class="dash-domain-name">${App.escapeHtml(c.subdomain || (c.slug+'.'+c.brand))}</div>
+              <div class="dash-domain-meta">${App.escapeHtml(c.name_en || c.slug)}</div>
+            </div>
+          </div>
+        </td>
+        <td>${statusBadge(c.status)}</td>
+        <td class="small text-muted">${App.escapeHtml(App.fmtDate(c.created_at))}</td>
+        <td>${expiryCell(c)}</td>
+        <td class="text-end">
+          <div class="d-flex gap-1 justify-content-end flex-wrap">
+            ${c.status==='verified' ? `<a class="btn btn-outline-primary btn-sm" target="_blank" href="https://${App.escapeHtml(c.subdomain)}"><i class="bi bi-box-arrow-up-right"></i></a>` : ''}
+            <button class="btn btn-primary btn-sm" type="button" data-manage="${c.id}"><i class="bi bi-pencil-square me-1"></i>Manage</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    tbody.querySelectorAll('[data-manage]').forEach(b => {
+      b.addEventListener('click', () => openManage(parseInt(b.getAttribute('data-manage'), 10)));
+    });
+  }
+
+
+  // ─── Manage Modal ──────────────────────────────────────────────────────────
+
+  function wireManageModal() {
+    const el = document.getElementById('manageModal');
+    if (el) manageModalInstance = new bootstrap.Modal(el);
+  }
+
+  function openManage(id) {
+    const c = _claims.find(x => x.id === id);
+    if (!c) { App.toast('Domain not found', 'error'); return; }
+    if (!manageModalInstance) return;
+
+    const isVerified = c.status === 'verified';
+    manageBody.innerHTML = `
+      <div class="mb-3">
+        <h5 class="mb-1">${App.escapeHtml(c.name_en || c.subdomain)}</h5>
+        <p class="text-muted small mb-2"><code>${App.escapeHtml(c.subdomain)}</code> ${statusBadge(c.status)} <span class="badge badge-brand">${App.escapeHtml(c.brand)}</span></p>
+        ${c.review_notes ? `<div class="alert alert-info small"><i class="bi bi-info-circle me-1"></i><strong>Reviewer:</strong> ${App.escapeHtml(c.review_notes)}</div>` : ''}
+      </div>
+      <ul class="nav nav-tabs" role="tablist">
+        ${isVerified ? '<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-dns">DNS</a></li>' : ''}
+        <li class="nav-item"><a class="nav-link ${isVerified ? '' : 'active'}" data-bs-toggle="tab" href="#tab-profile">Profile</a></li>
+        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-brand">Branding</a></li>
+        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-docs">Documents</a></li>
+      </ul>
+      <div class="tab-content pt-3">
+        ${isVerified ? `
+        <div class="tab-pane fade show active" id="tab-dns">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge ${c.dns_status==='live' ? 'bg-success' : 'bg-warning'}">${App.escapeHtml(c.dns_status || 'pending')}</span>
+            <a class="btn btn-sm btn-outline-primary" target="_blank" href="https://${App.escapeHtml(c.subdomain)}">Open site <i class="bi bi-box-arrow-up-right ms-1"></i></a>
+          </div>
+          <div data-dns-host="${c.id}"><div class="skeleton-v5" style="height:60px;"></div></div>
+        </div>` : ''}
+        <div class="tab-pane fade ${isVerified ? '' : 'show active'}" id="tab-profile">
+          <form data-form-profile="${c.id}">
+            <div class="row g-3">
+              <div class="col-md-6"><label class="form-label small fw-semibold">Name (English)</label><input class="form-control form-control-sm" name="name_en" value="${App.escapeHtml(c.name_en||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">Name (Bengali)</label><input class="form-control form-control-sm" name="name_bn" value="${App.escapeHtml(c.name_bn||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">Category</label><input class="form-control form-control-sm" name="category" value="${App.escapeHtml(c.category||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">EIIN</label><input class="form-control form-control-sm" name="eiin" value="${App.escapeHtml(c.eiin||'')}"></div>
+              <div class="col-md-4"><label class="form-label small fw-semibold">Division</label><select class="form-select form-select-sm" name="division" data-bd-division></select></div>
+              <div class="col-md-4"><label class="form-label small fw-semibold">District</label><select class="form-select form-select-sm" name="district" data-bd-district></select></div>
+              <div class="col-md-4"><label class="form-label small fw-semibold">Upazila</label><select class="form-select form-select-sm" name="upazila" data-bd-upazila></select></div>
+              <div class="col-12"><label class="form-label small fw-semibold">Address</label><input class="form-control form-control-sm" name="address" value="${App.escapeHtml(c.address||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">Contact name</label><input class="form-control form-control-sm" name="contact_name" value="${App.escapeHtml(c.contact_name||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">Contact phone</label><input class="form-control form-control-sm" name="contact_phone" value="${App.escapeHtml(c.contact_phone||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">Contact email</label><input class="form-control form-control-sm" name="contact_email" value="${App.escapeHtml(c.contact_email||'')}"></div>
+              <div class="col-md-6"><label class="form-label small fw-semibold">Website</label><input class="form-control form-control-sm" name="website" value="${App.escapeHtml(c.website||'')}"></div>
+              <div class="col-12"><label class="form-label small fw-semibold">About (English)</label><textarea class="form-control form-control-sm" name="about_en" rows="3">${App.escapeHtml(c.about_en||'')}</textarea></div>
+              <div class="col-12"><label class="form-label small fw-semibold">About (Bengali)</label><textarea class="form-control form-control-sm" name="about_bn" rows="3">${App.escapeHtml(c.about_bn||'')}</textarea></div>
+              <div class="col-12 text-end"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check-lg me-1"></i>Save changes</button></div>
+            </div>
+          </form>
+        </div>
+        <div class="tab-pane fade" id="tab-brand">
+          <p class="text-muted small">Upload your logo and banner for the public institution page.</p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Logo</label>
+              ${c.logo_url ? `<img src="${App.escapeHtml(c.logo_url)}" class="rounded mb-2" style="max-height:80px;">` : '<div class="bg-body-secondary rounded p-3 text-muted text-center mb-2">No logo</div>'}
+              <form data-form-image="${c.id}" data-kind="logo"><input type="file" class="form-control form-control-sm" name="file" accept="image/*"><button class="btn btn-sm btn-outline-primary mt-2" type="submit">Upload</button></form>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Banner</label>
+              ${c.banner_url ? `<img src="${App.escapeHtml(c.banner_url)}" class="rounded mb-2" style="max-height:80px;width:100%;object-fit:cover;">` : '<div class="bg-body-secondary rounded p-3 text-muted text-center mb-2">No banner</div>'}
+              <form data-form-image="${c.id}" data-kind="banner"><input type="file" class="form-control form-control-sm" name="file" accept="image/*"><button class="btn btn-sm btn-outline-primary mt-2" type="submit">Upload</button></form>
+            </div>
+          </div>
+        </div>
+        <div class="tab-pane fade" id="tab-docs">
+          <p class="text-muted small">Upload verification documents. Only admins can view these.</p>
+          <form data-form-doc="${c.id}" class="d-flex gap-2 flex-wrap mb-3">
+            <select class="form-select form-select-sm" name="doc_type" style="max-width:180px;">
+              <option value="eiin_certificate">EIIN certificate</option>
+              <option value="board_letter">Board letter</option>
+              <option value="trade_license">Trade license</option>
+              <option value="nid">Admin NID</option>
+              <option value="other">Other</option>
+            </select>
+            <input type="file" class="form-control form-control-sm" name="file" accept="application/pdf,image/*" style="max-width:240px;">
+            <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-upload me-1"></i>Upload</button>
+          </form>
+          <div data-docs="${c.id}"></div>
+        </div>
+      </div>`;
+
+    // Wire profile save
+    const pForm = manageBody.querySelector(`[data-form-profile="${c.id}"]`);
+    if (pForm) {
+      pForm.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const body = Object.fromEntries(new FormData(pForm).entries());
+        try {
+          await App.api(`/tenant/${c.id}/site`, { method: 'PATCH', body });
+          App.toast('Profile saved!', 'success');
+          loadDomains();
+        } catch (e) { App.toast(e?.detail || 'Save failed', 'error'); }
+      });
+    }
+
+    // Wire image uploads
+    manageBody.querySelectorAll('[data-form-image]').forEach(form => {
+      form.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const kind = form.getAttribute('data-kind');
+        const fd = new FormData(form);
+        try {
+          fd.append('kind', kind);
+          await App.api(`/tenant/${c.id}/upload-image`, { method: 'POST', body: fd });
+          App.toast(`${kind} uploaded!`, 'success');
+          loadDomains();
+          openManage(c.id);
+        } catch (e) { App.toast(e?.detail || 'Upload failed', 'error'); }
+      });
+    });
+
+    // Wire doc upload
+    const dForm = manageBody.querySelector(`[data-form-doc="${c.id}"]`);
+    if (dForm) {
+      dForm.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const fd = new FormData(dForm);
+        try {
+          await App.api(`/claims/${c.id}/documents`, { method: 'POST', body: fd });
+          App.toast('Document uploaded!', 'success');
+        } catch (e) { App.toast(e?.detail || 'Upload failed', 'error'); }
+      });
+    }
+
+    manageModalInstance.show();
+
+    // Load DNS records for verified domains
+    if (isVerified) loadDnsRecords(c.id, c.subdomain);
+  }
+
+
+  // ─── DNS Records CRUD (auto-syncs via Cloudflare) ───────────────────────────
+
+  const DNS_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS'];
+
+  async function loadDnsRecords(claimId, subdomain) {
+    const host = manageBody.querySelector(`[data-dns-host="${claimId}"]`);
+    if (!host) return;
+    host.innerHTML = '<div class="skeleton-v5" style="height:60px;"></div>';
+
+    try {
+      const r = await App.api(`/tenant/${claimId}/dns`);
+      const records = r.items || [];
+      renderDnsTable(host, records, claimId, subdomain || r.subdomain);
+    } catch (e) {
+      host.innerHTML = `<div class="alert alert-danger small py-2">${App.escapeHtml(e?.detail || 'Could not load DNS records')}</div>`;
+    }
+  }
+
+  function renderDnsTable(host, records, claimId, subdomain) {
+    const typeBadge = (type) => {
+      const colors = { A: 'primary', AAAA: 'info', CNAME: 'success', TXT: 'secondary', MX: 'warning', NS: 'dark' };
+      return `<span class="badge bg-${colors[type] || 'secondary'}-subtle text-${colors[type] || 'secondary'}">${type}</span>`;
+    };
+
+    host.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted small mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Manage DNS records for <code>${App.escapeHtml(subdomain)}</code>. Changes auto-sync to Cloudflare.
+        </p>
+        <button class="btn btn-primary btn-sm" data-dns-add="${claimId}">
+          <i class="bi bi-plus-lg me-1"></i>Add Record
+        </button>
+      </div>
+      ${records.length ? `
+      <div class="table-responsive">
+        <table class="table table-sm align-middle dash-table-v5 mb-0">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Name</th>
+              <th>Content</th>
+              <th>TTL</th>
+              <th>Proxy</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${records.map(rec => {
+              const fqdn = (rec.name === '@' || rec.name === '' || rec.name === subdomain)
+                ? subdomain
+                : `${rec.name}.${subdomain}`;
+              return `
+              <tr>
+                <td>${typeBadge(rec.type)}</td>
+                <td><code class="small">${App.escapeHtml(fqdn)}</code></td>
+                <td class="small" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${App.escapeHtml(rec.content)}">${App.escapeHtml(rec.content)}${rec.priority != null ? ` <span class="text-muted">(pri: ${rec.priority})</span>` : ''}</td>
+                <td class="small text-muted">${rec.ttl === 1 ? 'Auto' : rec.ttl}</td>
+                <td>${['A','AAAA','CNAME'].includes(rec.type) ? (rec.proxied ? '<i class="bi bi-cloud-fill text-warning"></i>' : '<i class="bi bi-cloud text-muted"></i>') : '<span class="text-muted">—</span>'}</td>
+                <td class="text-end">
+                  <button class="btn btn-sm btn-outline-primary me-1" data-dns-edit="${rec.id}" data-claim="${claimId}" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" data-dns-del="${rec.id}" data-claim="${claimId}" title="Delete">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>` : `
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-hdd-stack fs-2 d-block mb-2"></i>
+        <p class="small mb-0">No DNS records yet. Add one to point your subdomain at your hosting.</p>
+      </div>`}
+      <div data-dns-form-host="${claimId}"></div>
+    `;
+
+    // Wire Add button
+    host.querySelector(`[data-dns-add="${claimId}"]`)?.addEventListener('click', () => {
+      openDnsForm(claimId, subdomain, null, host);
+    });
+
+    // Wire Edit buttons
+    host.querySelectorAll('[data-dns-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const recId = parseInt(btn.getAttribute('data-dns-edit'), 10);
+        const rec = records.find(r => r.id === recId);
+        if (rec) openDnsForm(claimId, subdomain, rec, host);
+      });
+    });
+
+    // Wire Delete buttons
+    host.querySelectorAll('[data-dns-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const recId = btn.getAttribute('data-dns-del');
+        if (!confirm('Delete this DNS record? This will remove it from Cloudflare immediately.')) return;
+        btn.disabled = true;
+        try {
+          await App.api(`/tenant/${claimId}/dns/${recId}`, { method: 'DELETE' });
+          App.toast('DNS record deleted & removed from Cloudflare', 'success');
+          loadDnsRecords(claimId, subdomain);
+        } catch (e) {
+          App.toast(e?.detail || 'Delete failed', 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  function openDnsForm(claimId, subdomain, rec, host) {
+    const formHost = host.querySelector(`[data-dns-form-host="${claimId}"]`);
+    if (!formHost) return;
+    const isEdit = !!rec;
+
+    formHost.innerHTML = `
+      <div class="card border bg-body-secondary mt-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold mb-0">
+              <i class="bi bi-${isEdit ? 'pencil-square' : 'plus-circle'} me-1"></i>
+              ${isEdit ? 'Edit' : 'Add'} DNS Record
+            </h6>
+            <button class="btn btn-sm btn-outline-secondary" data-dns-cancel>
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <form data-dns-save="${claimId}">
+            <div class="row g-3">
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold">Type</label>
+                <select class="form-select form-select-sm" name="type" required>
+                  ${DNS_TYPES.map(t => `<option value="${t}" ${rec?.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold">Name</label>
+                <input type="text" class="form-control form-control-sm" name="name"
+                  value="${App.escapeHtml(rec?.name || '@')}" placeholder="@ for apex, www, mail..."
+                  required maxlength="120">
+                <small class="text-muted">Use <code>@</code> for ${App.escapeHtml(subdomain)}</small>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold">Content / Value</label>
+                <input type="text" class="form-control form-control-sm" name="content"
+                  value="${App.escapeHtml(rec?.content || '')}"
+                  placeholder="e.g. 203.0.113.10 or hostname.example.com"
+                  required maxlength="512">
+              </div>
+              <div class="col-md-1">
+                <label class="form-label small fw-semibold">TTL</label>
+                <input type="number" class="form-control form-control-sm" name="ttl"
+                  value="${rec?.ttl ?? 1}" min="0">
+              </div>
+              <div class="col-md-2" data-mx-field ${rec?.type === 'MX' ? '' : 'hidden'}>
+                <label class="form-label small fw-semibold">Priority</label>
+                <input type="number" class="form-control form-control-sm" name="priority"
+                  value="${rec?.priority ?? 10}" min="0" max="65535">
+              </div>
+              <div class="col-12" data-proxy-field ${rec && ['A','AAAA','CNAME'].includes(rec.type) ? '' : 'hidden'}>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="dns_proxied_${claimId}" name="proxied" ${rec?.proxied ? 'checked' : ''}>
+                  <label class="form-check-label small" for="dns_proxied_${claimId}">
+                    <i class="bi bi-cloud-fill text-warning me-1"></i>
+                    Proxy through Cloudflare (orange cloud — auto SSL + cache)
+                  </label>
+                </div>
+              </div>
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <i class="bi bi-cloud-upload me-1"></i>${isEdit ? 'Update & Sync to Cloudflare' : 'Create & Push to Cloudflare'}
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-dns-cancel>Cancel</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>`;
+
+    // Toggle MX priority / Proxy field based on type
+    const typeSelect = formHost.querySelector('[name="type"]');
+    const mxField = formHost.querySelector('[data-mx-field]');
+    const proxyField = formHost.querySelector('[data-proxy-field]');
+    typeSelect.addEventListener('change', () => {
+      mxField.hidden = typeSelect.value !== 'MX';
+      proxyField.hidden = !['A', 'AAAA', 'CNAME'].includes(typeSelect.value);
+    });
+
+    // Wire cancel
+    formHost.querySelectorAll('[data-dns-cancel]').forEach(btn => {
+      btn.addEventListener('click', () => { formHost.innerHTML = ''; });
+    });
+
+    // Wire submit
+    formHost.querySelector(`[data-dns-save="${claimId}"]`).addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      const payload = {
+        type: fd.get('type'),
+        name: (fd.get('name') || '@').trim() || '@',
+        content: (fd.get('content') || '').trim(),
+        ttl: parseInt(fd.get('ttl') || '1', 10),
+        priority: fd.get('priority') ? parseInt(fd.get('priority'), 10) : null,
+        proxied: !!ev.target.querySelector('[name="proxied"]')?.checked,
+      };
+
+      const submitBtn = ev.target.querySelector('[type="submit"]');
+      const origHtml = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Syncing to Cloudflare...';
+
+      try {
+        if (isEdit) {
+          await App.api(`/tenant/${claimId}/dns/${rec.id}`, { method: 'PATCH', body: payload });
+          App.toast('DNS record updated & synced to Cloudflare', 'success');
+        } else {
+          await App.api(`/tenant/${claimId}/dns`, { method: 'POST', body: payload });
+          App.toast('DNS record created & pushed to Cloudflare', 'success');
+        }
+        formHost.innerHTML = '';
+        loadDnsRecords(claimId, subdomain);
+      } catch (e) {
+        if (e?.errors) {
+          const firstErr = Object.values(e.errors)[0];
+          App.toast(firstErr || e.detail || 'Save failed', 'error');
+        } else {
+          App.toast(e?.detail || 'Failed to sync DNS record to Cloudflare', 'error');
+        }
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
+      }
+    });
+  }
+
+  // ─── Account Card (Settings pane) ──────────────────────────────────────────
+
+  function renderAccountCard() {
+    const host = document.querySelector('[data-account-card]');
+    if (!host || host.dataset.rendered) return;
+    host.dataset.rendered = '1';
+    const user = App.getUser();
+    if (!user) return;
+    host.innerHTML = `
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-3 mb-4">
+            <span class="d-inline-flex align-items-center justify-content-center rounded-circle text-white fw-bold" style="width:56px;height:56px;background:var(--c-primary);font-size:1.2rem;">
+              ${user.avatar_url ? `<img src="${App.escapeHtml(user.avatar_url)}" class="rounded-circle" style="width:100%;height:100%;object-fit:cover;">` : App.escapeHtml((user.name||user.email||'?')[0].toUpperCase())}
+            </span>
+            <div>
+              <h5 class="mb-0">${App.escapeHtml(user.name || 'User')}</h5>
+              <small class="text-muted">${App.escapeHtml(user.email || '')}</small>
+              ${user.is_admin ? '<span class="badge bg-primary-subtle text-primary ms-2">Admin</span>' : ''}
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Full Name</label>
+              <input class="form-control form-control-sm" value="${App.escapeHtml(user.name||'')}" disabled>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Email</label>
+              <input class="form-control form-control-sm" value="${App.escapeHtml(user.email||'')}" disabled>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Mobile</label>
+              <input class="form-control form-control-sm" value="${App.escapeHtml(user.mobile||'Not set')}" disabled>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Provider</label>
+              <input class="form-control form-control-sm" value="${App.escapeHtml(user.provider||'email')}" disabled>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ─── Support Payments ──────────────────────────────────────────────────────
+
+  function renderSupportPayments() {
+    const host = document.querySelector('[data-payments-host]');
+    if (!host || host.dataset.rendered) return;
+    host.dataset.rendered = '1';
+    App.getSettings().then(s => {
+      const methods = s?.payments?.methods || [];
+      if (!methods.length) return;
+      host.innerHTML = `
+        <div class="card border-0 shadow-sm mt-3">
+          <div class="card-header bg-transparent border-bottom py-3">
+            <h6 class="mb-0"><i class="bi bi-credit-card me-2 text-primary"></i>Payment Methods</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              ${methods.map(m => `
+                <div class="col-md-6">
+                  <div class="border rounded p-3">
+                    <h6 class="mb-1">${App.escapeHtml(m.label || m.type)}</h6>
+                    <p class="text-muted small mb-0">${App.escapeHtml(m.details || '')}</p>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    }).catch(() => {});
+  }
+
+})();
